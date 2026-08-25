@@ -3,7 +3,18 @@
 #include "vec3.h"
 #include "ray.h"
 
+bool hit_sphere(const Vec3& center, double radius, const Ray& r) {
+    Vec3 oc = center - r.origin();
+    double a = dot(r.direction(), r.direction());
+    double b = -2.0 * dot(r.direction(), oc);
+    double c = dot(oc, oc) - radius * radius;
+    double discriminant = b * b - 4 * a * c;
+    return (discriminant >= 0);
+}
+
 Color ray_color(const Ray& r) {
+    if (hit_sphere(Vec3(0, 0, -1), 0.5, r)) return Color(1, 0, 0);
+
     Vec3 unit_direction = unit_vector(r.direction()); // -1 to 1
     double a = 0.5 * (unit_direction.y() + 1.0); // 0 to 1
     return (1.0 - a) * Color (1.0, 1.0, 1.0) + a*Color(0.1, 0.5, 0.7);
