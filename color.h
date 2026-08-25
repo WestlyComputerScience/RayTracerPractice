@@ -21,6 +21,10 @@ class Color {
         Color operator*(const Color& c) const { return Color(this->r() * c.r(), this->g() * c.g(), this->b() * c.b()); }
 };
 
+inline Color operator*(double t, const Color& c) {
+    return c * t;
+}
+
 inline void write_color(std::ostream& out, const Color& pixel_color) {
     int rbyte = int(255.999 * pixel_color.r());
     int gbyte = int(255.999 * pixel_color.g());
