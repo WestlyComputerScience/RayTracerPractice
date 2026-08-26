@@ -1,8 +1,7 @@
 #ifndef VEC3_H
 #define VEC3_H
 
-#include<cmath>
-#include<iostream>
+#include "common_constants.h"
 
 class Vec3 {
     public:
