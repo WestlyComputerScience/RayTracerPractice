@@ -6,7 +6,7 @@
 Color ray_color(const Ray& r, const Hittable& world) {
     HitRecord rec;
     if (world.hit(r, 0, infinity, rec)) {
-        return 0.5 * (rec.normal + Color(1, 1, 1));
+        return 0.5 * (Color(rec.normal) + Color(1, 1, 1));
     }
 
     Vec3 unit_direction = unit_vector(r.direction()); // -1 to 1
