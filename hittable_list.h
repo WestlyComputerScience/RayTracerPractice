@@ -27,7 +27,7 @@ class HittableList : public Hittable {
             double closest_so_far = ray_tmax;
 
             for (const shared_ptr<Hittable>& object : objects) {
-                if (object->hit(r, closest_so_far, ray_tmax, temp_rec)) {
+                if (object->hit(r, ray_tmin, closest_so_far, temp_rec)) {
                     hit_anything = true;
                     closest_so_far = temp_rec.t;
                     rec = temp_rec;
