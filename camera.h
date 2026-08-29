@@ -78,6 +78,7 @@ class Camera {
                         Ray r = get_ray(i, j);
                         pixel_color += ray_color(r, world);
                     }
+                    write_color(std::cout, pixel_samples_scale * pixel_color);
                 }
             }
             std::clog << "\rDone.                 \n";

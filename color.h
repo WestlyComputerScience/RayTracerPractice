@@ -19,7 +19,7 @@ class Color {
         Color operator+(const Color& c) const { return Color(v + c.v); }
         Color operator*(double t) const { return Color(t * v); }
         Color operator*(const Color& c) const { return Color(this->r() * c.r(), this->g() * c.g(), this->b() * c.b()); }
-        Color operator+=(const Color& e) {
+        Color& operator+=(const Color& e) {
             v[0] += e.v[0];
             v[1] += e.v[1];
             v[2] += e.v[2];
