@@ -2,6 +2,7 @@
 #define CAMERA_H
 
 #include "hittable.h"
+#include "material.h"
 
 class Camera {
     private:
@@ -47,11 +48,17 @@ class Camera {
             return Vec3(random_double() - 0.5, random_double() - 0.5, 0);
         }
 
-        Color ray_color(const Ray& r, const Hittable& world) const {
+        Color ray_color(const Ray& r, int depth, const Hittable& world) const {
+            if (depth <= 0) return Color (0, 0, 0);
+
             HitRecord rec;
-            
-            if (world.hit(r, Interval(0, infinity), rec)) {
-                return 0.5 * (Color(rec.normal) + Color(1, 1, 1));
+            if (world.hit(r, Interval(0.001, infinity), rec)) { // 0.001 solves shadow acne problem
+                Ray scattered;
+                Color attenuation;
+                if (rec.mat->scatter(r, rec, attenuation, scattered)) {
+                    return attenuation * ray_color(scattered, depth - 1, world);
+                }
+                return Color(0, 0, 0);
             }
 
             Vec3 unit_direction = unit_vector(r.direction());
@@ -63,6 +70,7 @@ class Camera {
         double aspect_ratio = 1.0;
         int image_width = 100;
         int samples_per_pixel = 10;
+        int max_ray_bounces = 10;
 
         void render(const Hittable& world) {
             initialize();
@@ -76,7 +84,7 @@ class Camera {
                     Color pixel_color(0, 0, 0);
                     for (int sample = 0; sample < samples_per_pixel; sample++) {
                         Ray r = get_ray(i, j);
-                        pixel_color += ray_color(r, world);
+                        pixel_color += ray_color(r, max_ray_bounces, world);
                     }
                     write_color(std::cout, pixel_samples_scale * pixel_color);
                 }

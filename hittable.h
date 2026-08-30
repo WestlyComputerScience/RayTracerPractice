@@ -3,10 +3,13 @@
 
 #include "common_constants.h"
 
+class Material;
+
 class HitRecord {
     public:
         Vec3 p;
         Vec3 normal;
+        shared_ptr<Material> mat;
         double t;
         bool front_face;
 
