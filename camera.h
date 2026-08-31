@@ -12,6 +12,9 @@ class Camera {
         Vec3 pixel00_loc;
         Vec3 pixel_delta_u;
         Vec3 pixel_delta_v;
+        Vec3 u;
+        Vec3 v;
+        Vec3 w;
 
         void initialize() {
             image_height = int(image_width / aspect_ratio);
@@ -19,19 +22,25 @@ class Camera {
 
             pixel_samples_scale = 1.0 / samples_per_pixel;
 
-            center = Vec3(0, 0, 0);
+            center = lookfrom;
 
-            double focal_length = 1.0;
-            double viewport_height = 2.0;
+            double focal_length = (lookfrom - lookat).length();
+            double theta = degrees_to_radians(vfov);
+            double h = std::tan(theta/2);
+            double viewport_height = 2 * h * focal_length;
             double viewport_width = viewport_height * (double(image_width)/image_height);
 
-            Vec3 viewport_u = Vec3(viewport_width, 0, 0);
-            Vec3 viewport_v = Vec3(0, -viewport_height, 0);
+            w = unit_vector(lookfrom - lookat);
+            u = unit_vector(cross(vup, w));
+            v = cross(w, u);
+
+            Vec3 viewport_u = viewport_width * u;
+            Vec3 viewport_v = viewport_height * -v;
 
             pixel_delta_u = viewport_u / image_width;
             pixel_delta_v = viewport_v / image_height;
 
-            Vec3 viewport_upper_left = center - Vec3(0, 0, focal_length) - viewport_u/2 - viewport_v/2;
+            Vec3 viewport_upper_left = center - (focal_length * w) - viewport_u / 2 - viewport_v / 2;
             pixel00_loc = viewport_upper_left + 0.5 * (pixel_delta_u + pixel_delta_v);
         }
 
@@ -71,6 +80,10 @@ class Camera {
         int image_width = 100;
         int samples_per_pixel = 10;
         int max_ray_bounces = 10;
+        double vfov = 90; // vertical field of view
+        Vec3 lookfrom = Vec3(0, 0, 0);
+        Vec3 lookat = Vec3(0, 0, -1);
+        Vec3 vup = Vec3(0, 1, 0);
 
         void render(const Hittable& world) {
             initialize();
