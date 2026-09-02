@@ -25,6 +25,14 @@ class Color {
             v[2] += e.v[2];
             return *this;
         }
+
+        static Color random() {
+            return Color(Vec3::random());
+        }
+
+        static Color random(double min, double max) {
+            return Color(Vec3::random(min, max));
+        }
 };
 
 inline Color operator*(double t, const Color& c) {
