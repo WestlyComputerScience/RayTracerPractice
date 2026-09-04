@@ -26,6 +26,8 @@ void make_ray_tracing_in_one_weekend_cover(HittableList& world) {
                     Color albedo = Color::random() * Color::random();
                     sphere_material = make_shared<Lambertian>(albedo);
                     world.add(make_shared<Sphere>(center, 0.2, sphere_material));
+                    Vec3 center2 = center + Vec3(0, random_double(0, 0.5), 0);
+                    world.add(make_shared<Sphere>(center, center2, 0.2, sphere_material));
                 } else if (choose_mat < 0.95) {
                     // metal
                     Color albedo = Color::random(0.5, 1);
@@ -49,8 +51,8 @@ int main() {
     Camera cam;
 
     cam.aspect_ratio = 16.0 / 9.0;
-    cam.image_width = 1200;
-    cam.samples_per_pixel = 500;
+    cam.image_width = 400;
+    cam.samples_per_pixel = 100;
     cam.max_ray_bounces = 50;
 
     cam.vfov = 20;
