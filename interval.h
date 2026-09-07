@@ -30,6 +30,16 @@ class Interval {
             if (x > max) return max;
             return x;
         }
+
+        Interval expand(double delta) const {
+            double padding = delta / 2;
+            return Interval(min - padding, max + padding);
+        }
+
+        Interval(const Interval& a, const Interval& b) {
+            min = a.min <= b.min ? a.min : b.min;
+            max = a.max >= b.max ? a.max : b.max;
+        }
 };
 
 const Interval Interval::empty = Interval(+infinity, -infinity);

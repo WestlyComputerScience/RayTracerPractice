@@ -8,8 +8,8 @@ class Camera {
     private:
         int image_height;
         double pixel_samples_scale;
-        Vec3 center;
-        Vec3 pixel00_loc;
+        Point3 center;
+        Point3 pixel00_loc;
         Vec3 pixel_delta_u;
         Vec3 pixel_delta_v;
         Vec3 u, v, w;
@@ -39,7 +39,7 @@ class Camera {
             pixel_delta_u = viewport_u / image_width;
             pixel_delta_v = viewport_v / image_height;
 
-            Vec3 viewport_upper_left = center - (focus_dist * w) - viewport_u / 2 - viewport_v / 2;
+            Point3 viewport_upper_left = center - (focus_dist * w) - viewport_u / 2 - viewport_v / 2;
             pixel00_loc = viewport_upper_left + 0.5 * (pixel_delta_u + pixel_delta_v);
 
             double defocus_radius = focus_dist * std::tan(degrees_to_radians(defocus_angle / 2));
@@ -49,8 +49,8 @@ class Camera {
 
         Ray get_ray(int i, int j) const {
             Vec3 offset = sample_square();
-            Vec3 pixel_sample = pixel00_loc + ((i + offset.x()) * pixel_delta_u) + ((j + offset.y()) * pixel_delta_v);
-            Vec3 ray_origin = (defocus_angle <= 0) ? center : defocus_disk_sample();
+            Point3 pixel_sample = pixel00_loc + ((i + offset.x()) * pixel_delta_u) + ((j + offset.y()) * pixel_delta_v);
+            Point3 ray_origin = (defocus_angle <= 0) ? center : defocus_disk_sample();
             Vec3 ray_direction = pixel_sample - ray_origin;
             double ray_time = random_double();
             return Ray(ray_origin, ray_direction, ray_time);
@@ -60,7 +60,7 @@ class Camera {
             return Vec3(random_double() - 0.5, random_double() - 0.5, 0);
         }
 
-        Vec3 defocus_disk_sample() const {
+        Point3 defocus_disk_sample() const {
             Vec3 p = random_in_unit_disk();
             return center + (p[0] * defocus_disk_u) + (p[1] * defocus_disk_v);
         }
@@ -91,8 +91,8 @@ class Camera {
         double vfov = 90; // vertical field of view
         double defocus_angle = 0;
         double focus_dist = 10;
-        Vec3 lookfrom = Vec3(0, 0, 0);
-        Vec3 lookat = Vec3(0, 0, -1);
+        Point3 lookfrom = Point3(0, 0, 0);
+        Point3 lookat = Point3(0, 0, -1);
         Vec3 vup = Vec3(0, 1, 0);
 
         void render(const Hittable& world) {
