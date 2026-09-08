@@ -50,14 +50,23 @@ class Sphere : public Hittable {
 
             rec.t = root;
             rec.p = r.at(rec.t);
-            rec.normal = (rec.p - current_center) / radius;
-            rec.set_face_normal(r, rec.normal);
+            Vec3 outward_normal = (rec.p - current_center) / radius;
+            rec.set_face_normal(r, outward_normal);
+            get_sphere_uv(outward_normal, rec.u, rec.v);
             rec.mat = mat;
 
             return true;
         }
 
         Aabb bounding_box() const override { return bbox; }
+
+        static void get_sphere_uv(const Point3& p, double& u, double& v) {
+            double theta = std::acos(-p.y());
+            double phi = std::atan2(-p.z(), p.x()) + pi;
+
+            u = phi / (2 * pi);
+            v = theta / pi;
+        }
 };
 
 #endif

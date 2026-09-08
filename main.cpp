@@ -6,8 +6,11 @@
 #include "bvh.h"
 
 void make_ray_tracing_in_one_weekend_cover(HittableList& world) {
-    shared_ptr<Material> material_ground = make_shared<Lambertian>(Color(0.5, 0.5, 0.5));
-    world.add(make_shared<Sphere>(Point3(0, -1000, 0), 1000, material_ground));
+    // shared_ptr<Material> material_ground = make_shared<Lambertian>(Color(0.5, 0.5, 0.5));
+    // world.add(make_shared<Sphere>(Point3(0, -1000, 0), 1000, material_ground));
+
+    shared_ptr<Texture> checker = make_shared<CheckerTexture>(0.32, Color(0.2, 0.3, 0.1), Color(0.9, 0.9, 0.9));
+    world.add(make_shared<Sphere>(Point3(0, -1000, 0), 1000, make_shared<Lambertian>(checker)));
 
     for (int a = -11; a < 11; a++) {
         for (int b = -11; b < 11; b++) {
@@ -44,7 +47,7 @@ void make_ray_tracing_in_one_weekend_cover(HittableList& world) {
     }
 }
 
-int main() {
+void bouncing_spheres() {
     HittableList world;
 
     make_ray_tracing_in_one_weekend_cover(world);
@@ -67,6 +70,65 @@ int main() {
     cam.focus_dist = 10.0;
 
     cam.render(world);
+}
+
+void checkered_spheres() {
+    HittableList world;
+
+    shared_ptr<Texture> checker = make_shared<CheckerTexture>(0.32, Color(0.2, 0.3, 0.1), Color(0.9, 0.9, 0.9));
+
+    world.add(make_shared<Sphere>(Point3(0, -10, 0), 10, make_shared<Lambertian>(checker)));
+    world.add(make_shared<Sphere>(Point3(0, 10, 0), 10, make_shared<Lambertian>(checker)));
+
+    Camera cam;
+
+    cam.aspect_ratio = 16.0 / 9.0;
+    cam.image_width = 400;
+    cam.samples_per_pixel = 100;
+    cam.max_ray_bounces = 50;
+
+    cam.vfov = 20;
+    cam.lookfrom = Point3(13,2,3);
+    cam.lookat = Point3(0,0,0);
+    cam.vup = Vec3(0,1,0);
+
+    cam.defocus_angle = 0;
+
+    cam.render(world);
+}
+
+void earth() {
+    HittableList world;
+
+    // shared_ptr<Texture> earth_texture = make_shared<ImageTexture>("earthmap.jpg");
+    shared_ptr<Texture> earth_texture = make_shared<ImageTexture>("moon.jpg");
+    shared_ptr<Material> earth_surface = make_shared<Lambertian>(earth_texture);
+    shared_ptr<Hittable> globe = make_shared<Sphere>(Point3(0, 0, 0), 2, earth_surface);
+    world.add(globe);
+
+    Camera cam;
+
+    cam.aspect_ratio = 16.0 / 9.0;
+    cam.image_width = 400;
+    cam.samples_per_pixel = 100;
+    cam.max_ray_bounces = 50;
+
+    cam.vfov = 20;
+    cam.lookfrom = Point3(13,2,3);
+    cam.lookat = Point3(0,0,0);
+    cam.vup = Vec3(0,1,0);
+
+    cam.defocus_angle = 0;
+
+    cam.render(world);
+}
+
+int main() {
+    switch (3) {
+        case 1: bouncing_spheres(); break;
+        case 2: checkered_spheres(); break;
+        case 3: earth(); break;
+    }
 }
 
 /* === Archived tests ===

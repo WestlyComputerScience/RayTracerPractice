@@ -39,7 +39,7 @@ class BvhNode : public Hittable {
         }
 
         BvhNode(std::vector<shared_ptr<Hittable>>& objects, size_t start, size_t end) { 
-            bbox = Aabb:empty;
+            bbox = Aabb::empty;
             for (size_t object_index = start; object_index < end; object_index++) {
                 bbox = Aabb(bbox, objects[object_index]->bounding_box());
             }
