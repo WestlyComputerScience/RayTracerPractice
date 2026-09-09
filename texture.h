@@ -1,6 +1,7 @@
 #ifndef TEXTURE_H
 #define TEXTURE_H
 
+#include "perlin.h"
 #include "rtw_stb_image.h"
 
 class Texture {
@@ -61,6 +62,18 @@ class ImageTexture : public Texture {
 
             double color_scale = 1.0 / 255.0;
             return Color(color_scale * pixel[0], color_scale * pixel[1], color_scale * pixel[2]);
+        }
+};
+
+class NoiseTexture : public Texture {
+    private:
+        Perlin noise;
+        double scale;
+    public:
+        NoiseTexture(double scale) : scale(scale) {}
+
+        Color value(double u, double v, const Point3& p) const override {
+            return Color(0.5, 0.5, 0.5) * (1 + std::sin(scale * p.z() + 10 * noise.turb(p, 7)));
         }
 };
 
