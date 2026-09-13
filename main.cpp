@@ -4,6 +4,7 @@
 #include "hittable_list.h"
 #include "sphere.h"
 #include "bvh.h"
+#include "triangle.h"
 
 void make_ray_tracing_in_one_weekend_cover(HittableList& world) {
     // shared_ptr<Material> material_ground = make_shared<Lambertian>(Color(0.5, 0.5, 0.5));
@@ -147,12 +148,39 @@ void perlin_spheres() {
     cam.render(world);
 }
 
+void triangles() {
+    HittableList world;
+
+    shared_ptr<Texture> pertext = make_shared<NoiseTexture>(4);
+    world.add(make_shared<Sphere>(Point3(0, -1000, 0), 1000, make_shared<Lambertian>(pertext)));
+
+    shared_ptr<Texture> triangleTex = make_shared<NoiseTexture>(4);
+    world.add(make_shared<Triangle>(Point3(0, 2, 0), Point3(2, 2, 0), Point3(0, 2, 2), make_shared<Lambertian>(triangleTex)));
+
+    Camera cam;
+
+    cam.aspect_ratio = 16.0 / 9.0;
+    cam.image_width = 400;
+    cam.samples_per_pixel = 100;
+    cam.max_ray_bounces = 50;
+
+    cam.vfov = 20;
+    cam.lookfrom = Point3(13,2,3);
+    cam.lookat = Point3(0,0,0);
+    cam.vup = Vec3(0,1,0);
+
+    cam.defocus_angle = 0;
+
+    cam.render(world);
+}
+
 int main() {
-    switch (4) {
+    switch (5) {
         case 1: bouncing_spheres(); break;
         case 2: checkered_spheres(); break;
         case 3: moon(); break;
         case 4: perlin_spheres(); break;
+        case 5: triangles(); break;
     }
 }
 

@@ -3,6 +3,8 @@
 
 #include "common_constants.h"
 
+#include <array>
+
 class Vec3 {
     public:
         double e[3];
@@ -142,6 +144,29 @@ inline Vec3 random_in_unit_disk() {
         if (p.length_squared() < 1) {
             return p;
         }
+    }
+}
+
+inline double difference_of_products(const double& a, const double& b, const double& c, const double& d) {
+    double cd = c * d;
+    double err = std::fma(c, d, -cd);
+    double dop = std::fma(a, b, -cd);
+    return dop + err;
+}
+
+inline Vec3 permute(const Vec3& v, std::array<int, 3> perm) {
+    return Vec3(v[perm[0]], v[perm[1]], v[perm[2]]);
+}
+
+inline Vec3 abs(const Vec3& v) {
+    return Vec3(std::abs(v.x()), std::abs(v.y()), std::abs(v.z()));
+}
+
+inline double max_component_index(const Vec3& v) {
+    if (v.x() > v.y()) {
+        return (v.x() > v.z()) ? 0 : 2;
+    } else {
+        return (v.y() > v.z()) ? 1 : 2;
     }
 }
 
