@@ -71,11 +71,8 @@ class Triangle : public Hittable {
             v3t[2] *= sz;
 
             double tScaled = e0 * v1t.z() + e1 * v2t.z() + e2 * v3t.z();
-            if (det < 0) {
-                if (tScaled > ray_t.min * det || tScaled < ray_t.max * det) return false;
-            } else {
-                if (tScaled < ray_t.min * det || tScaled > ray_t.max * det) return false;
-            }
+            if (det < 0 && (tScaled >= ray_t.min * det || tScaled <= ray_t.max * det)) return false;
+            if (det > 0 && (tScaled <= ray_t.min * det || tScaled >= ray_t.max * det)) return false;
 
             // Compute baycentric coords and t value for triangle intersection
             double invDet = 1 / det;

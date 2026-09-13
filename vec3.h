@@ -162,7 +162,7 @@ inline Vec3 abs(const Vec3& v) {
     return Vec3(std::abs(v.x()), std::abs(v.y()), std::abs(v.z()));
 }
 
-inline double max_component_index(const Vec3& v) {
+inline int max_component_index(const Vec3& v) {
     if (v.x() > v.y()) {
         return (v.x() > v.z()) ? 0 : 2;
     } else {
