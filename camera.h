@@ -69,19 +69,19 @@ class Camera {
             if (depth <= 0) return Color (0, 0, 0);
 
             HitRecord rec;
-            if (world.hit(r, Interval(0.001, infinity), rec)) { // 0.001 solves shadow acne problem
-                Ray scattered;
-                Color attenuation;
-                if (rec.mat->scatter(r, rec, attenuation, scattered)) {
-                    return attenuation * ray_color(scattered, depth - 1, world);
-                }
-                return Color(0, 0, 0);
+            if (!world.hit(r, Interval(0.001, infinity), rec)) { // 0.001 solves shadow acne problem
+                return background;
             }
+
+            Ray scattered;
+            Color attenuation;
+            Color color_from_emission = rec.mat->emitted(rec.u, rec.v, rec.p);
+
+            if (!rec.mat->scatter(r, rec, attenuation, scattered)) return color_from_emission;
+
+            Color color_from_scatter = attenuation * ray_color(scattered, depth - 1, world);
             
-            // BLUE/WHITE SKY
-            Vec3 unit_direction = unit_vector(r.direction());
-            double a = 0.5 * (unit_direction.y() + 1.0);
-            return (1.0 - a) * Color(1.0, 1.0, 1.0) + a * Color(0.5, 0.7, 1.0);
+            return color_from_emission + color_from_scatter;
         }
 
     public:
@@ -95,6 +95,7 @@ class Camera {
         Point3 lookfrom = Point3(0, 0, 0);
         Point3 lookat = Point3(0, 0, -1);
         Vec3 vup = Vec3(0, 1, 0);
+        Color background;
 
         void render(const Hittable& world) {
             initialize();

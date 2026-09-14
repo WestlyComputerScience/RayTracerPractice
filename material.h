@@ -8,6 +8,10 @@ class Material {
     public:
         virtual ~Material() = default;
 
+        virtual Color emitted(double u, double v, const Point3& p) const {
+            return Color(0, 0, 0);
+        }
+
         virtual bool scatter(const Ray& r, const HitRecord& rec, Color& attenuation, Ray& scattered) const {
             return false;
         }
@@ -79,6 +83,18 @@ class Dielectric : public Material {
 
             scattered = Ray(rec.p, direction, r_in.time());
             return true;
+        }
+};
+
+class DiffuseLight : public Material {
+    private:
+        shared_ptr<Texture> tex;
+    public:
+        DiffuseLight(shared_ptr<Texture> tex) : tex(tex) {}
+        DiffuseLight(const Color& emit) : tex(make_shared<SolidColor>(emit)) {}
+
+        Color emitted(double u, double v, const Point3& p) const override {
+            return tex->value(u, v, p);
         }
 };
 
