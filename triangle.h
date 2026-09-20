@@ -17,8 +17,6 @@ class Triangle : public Hittable {
         }
 
         /**
-        blah
-
         Majority of the method is taken from chapter 6.5.3 of the PBRT https://pbr-book.org/4ed/Shapes/Triangle_Meshes#RayndashTriangleIntersection
         */
         bool hit(const Ray& r, Interval ray_t, HitRecord& rec) const override {

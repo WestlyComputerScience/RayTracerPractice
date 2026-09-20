@@ -5,6 +5,9 @@
 
 #include <array>
 
+/**
+* The heart of the ray tracer, this is a standard vector class.
+*/
 class Vec3 {
     public:
         double e[3];
@@ -110,10 +113,10 @@ inline Vec3 unit_vector(const Vec3& v) {
 
 inline Vec3 random_unit_vector() {
     while (true) {
-        Vec3 p = Vec3::random(-1 ,1);
+        Vec3 p = Vec3::random(-1 ,1); // randomized point -1 to 1 on all axes
         double lensq = p.length_squared();
         if (1e-160 < lensq && lensq <= 1) {
-            return p / sqrt(lensq);
+            return p / sqrt(lensq); // normalizes vector to length 1
         }
     }
 }
@@ -138,6 +141,7 @@ inline Vec3 refract(const Vec3& uv, const Vec3& n, double etai_over_etat) {
     return r_out_perp + r_out_parallel;
 }
 
+// random 2D point inside circle
 inline Vec3 random_in_unit_disk() {
     while (true) {
         Vec3 p = Vec3(random_double(-1, 1), random_double(-1, 1), 0);
@@ -147,6 +151,7 @@ inline Vec3 random_in_unit_disk() {
     }
 }
 
+// a * b - c * d (pbrt high numerical accuracy)
 inline double difference_of_products(const double& a, const double& b, const double& c, const double& d) {
     double cd = c * d;
     double err = std::fma(c, d, -cd);
@@ -154,6 +159,8 @@ inline double difference_of_products(const double& a, const double& b, const dou
     return dop + err;
 }
 
+// An arrrray containing a permutation of indicies 0, 1, 2 maps index 0 to y, index 1 to z, and index 2 to x.
+// Used to compute the dominant coordinate axis and permute the triangles vertices so the say points primarily down +Z axis.
 inline Vec3 permute(const Vec3& v, std::array<int, 3> perm) {
     return Vec3(v[perm[0]], v[perm[1]], v[perm[2]]);
 }

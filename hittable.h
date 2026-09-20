@@ -6,6 +6,10 @@
 
 class Material;
 
+/**
+* A temporary container for collision details. Contains information like point, normal, material, ray paramater distance (t),
+* texture coords (u, v), and if the ray struct the exterior or interior surface.
+*/
 class HitRecord {
     public:
         Point3 p;
@@ -21,6 +25,10 @@ class HitRecord {
         }
 };
 
+/**
+* Abstract base interface for every object in the ray tracer that can intersect. Defines how objects are hit and 
+* how the object is bounded. 
+*/
 class Hittable {
     public:
         virtual ~Hittable() = default;
@@ -30,6 +38,9 @@ class Hittable {
         virtual Aabb bounding_box() const = 0;
 };
 
+/**
+* A decorator that translates any Hittable object.
+*/
 class Translate : public Hittable {
     private:
         shared_ptr<Hittable> object;
@@ -55,6 +66,23 @@ class Translate : public Hittable {
         Aabb bounding_box() const override { return bbox; }
 };
 
+/**
+* A decorator that rotates any hittable object. The idea is to rotate a point/vector by theta around the Y-axis with matrix multiplication.
+* Then, to rotate by +theta, we transform the incoming ray by the inverse rotation -theta (below is a visual representation for myself in debugging).
+* 
+* Initially:
+* ---------------------------
+* | cos(theta) 0 sin(theta) |
+* |     0      1       0    |
+* |-sin(theta) 0 cos(theta) |
+* ---------------------------
+* Rotated:
+* ---------------------------
+* | cos(theta) 0 -sin(theta)|
+* |     0      1       0    |
+* | sin(theta) 0 cos(theta) |
+* ---------------------------
+*/
 class RotateY : public Hittable {
     private:
         shared_ptr<Hittable> object;
@@ -63,6 +91,7 @@ class RotateY : public Hittable {
         Aabb bbox;
     public:
         RotateY(shared_ptr<Hittable> object, double angle) : object(object) {
+            // store original bounds
             double radians = degrees_to_radians(angle);
             sin_theta = std::sin(radians);
             cos_theta = std::cos(radians);
@@ -71,6 +100,7 @@ class RotateY : public Hittable {
             Point3 min(infinity, infinity, infinity);
             Point3 max(-infinity, -infinity, -infinity);
 
+            // iterating all 8 corners of initial bounding box
             for (int i = 0; i < 2; i++) {
                 for (int j = 0; j < 2; j++) {
                     for (int k = 0; k < 2; k++) {
@@ -83,6 +113,7 @@ class RotateY : public Hittable {
 
                         Vec3 tester(newX, y, newZ);
 
+                        // rotating each corner and refitting the bounding box
                         for (int c = 0; c < 3; c++) {
                             min[c] = std::fmin(min[c], tester[c]);
                             max[c] = std::fmax(max[c], tester[c]);
@@ -108,6 +139,7 @@ class RotateY : public Hittable {
                 (sin_theta * r.direction().x()) + (cos_theta * r.direction().z())
             );
 
+            // apply inverse rotation
             Ray rotated_r(origin, direction, r.time());
 
             if (!object->hit(rotated_r, ray_t, rec)) return false; // if intsersection doesn't exist in object space

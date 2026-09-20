@@ -1,6 +1,9 @@
 #ifndef INTERVAL_H
 #define INTERVAL_H
 
+/**
+* Manages standard intervals.
+*/
 class Interval {
     public:
         double min;
@@ -31,6 +34,7 @@ class Interval {
             return x;
         }
 
+        // Used for Aabb bounding boxes to expand interval by delta / 2
         Interval expand(double delta) const {
             double padding = delta / 2;
             return Interval(min - padding, max + padding);
@@ -45,6 +49,7 @@ class Interval {
 const Interval Interval::empty = Interval(+infinity, -infinity);
 const Interval Interval::universe = Interval(-infinity, +infinity);
 
+// shift the entire range by a set amount
 Interval operator+(const Interval& ival, double displacement) {
     return Interval(ival.min + displacement, ival.max + displacement);
 }

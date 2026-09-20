@@ -9,6 +9,9 @@
 using std::make_shared;
 using std::shared_ptr;
 
+/**
+* Container for storing and bundling multiple hit objects in a single scene. 
+*/
 class HittableList : public Hittable {
     private:
         Aabb bbox;
@@ -30,11 +33,11 @@ class HittableList : public Hittable {
             bool hit_anything = false;
             double closest_so_far = ray_t.max;
 
-            for (const shared_ptr<Hittable>& object : objects) {
+            for (const shared_ptr<Hittable>& object : objects) { // tests all objects for each ray
                 if (object->hit(r, Interval(ray_t.min, closest_so_far), temp_rec)) {
                     hit_anything = true;
-                    closest_so_far = temp_rec.t;
-                    rec = temp_rec;
+                    closest_so_far = temp_rec.t; // smallest distance for ray intersection ocurring
+                    rec = temp_rec; // take closest hit
                 }
             }
 
