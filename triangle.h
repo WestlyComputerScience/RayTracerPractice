@@ -3,12 +3,18 @@
 
 #include "common_constants.h"
 
+/**
+* Implementation of a triangle.
+*/
 class Triangle : public Hittable {
     private:
         Point3 v1, v2, v3;
         shared_ptr<Material> mat;
         Aabb bbox;
     public:
+        /**
+        * Builds the bounding boxes for pairs of vertices.
+        */
         Triangle(const Point3& v1, const Point3& v2, const Point3& v3, shared_ptr<Material> mat) 
         : v1(v1), v2(v2), v3(v3), mat(mat) {
             Aabb box_v1_v2(v1, v2);
@@ -17,7 +23,9 @@ class Triangle : public Hittable {
         }
 
         /**
-        Majority of the method is taken from chapter 6.5.3 of the PBRT https://pbr-book.org/4ed/Shapes/Triangle_Meshes#RayndashTriangleIntersection
+        * Calculates if a ray has hit the triangle.
+        * 
+        * Note: The majority of this method is taken from chapter 6.5.3 of the PBRT https://pbr-book.org/4ed/Shapes/Triangle_Meshes#RayndashTriangleIntersection
         */
         bool hit(const Ray& r, Interval ray_t, HitRecord& rec) const override {
             // return no intersection if triangle is degenerate (all 3 points align in a line)

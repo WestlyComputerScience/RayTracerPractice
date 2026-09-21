@@ -5,7 +5,11 @@
 #include "material.h"
 #include "texture.h"
 
-// Doesn't handle shapes that contain voids (toruses etc.)
+/**
+* a
+*
+* Note: This doesn't handle shapes that contain voids (toruses etc.)
+*/
 class ConstantMedium : public Hittable {
     private:
         shared_ptr<Hittable> boundary;

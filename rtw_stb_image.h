@@ -13,6 +13,9 @@
 #include <cstdlib>
 #include <iostream>
 
+/**
+* Helper class that wraps the stb_image library, handling loading image files from disk.
+*/
 class RtwImage {
     private:
         const int bytes_per_pixel = 3;
@@ -22,18 +25,27 @@ class RtwImage {
         int image_height = 0;
         int bytes_per_scanline = 0;
 
+        /**
+        * Clamps pixel coords to valid image grid bounds.
+        */
         static int clamp(int x, int low, int high) {
             if (x < low) return low;
             if (x < high) return x;
             return high - 1;
         }
 
+        /**
+        * Quantizes normalized floats to byte integers.
+        */
         static unsigned char float_to_byte(float value) {
             if (value <= 0.0) return 0;
             if (1.0 <= value) return 255;
             return static_cast<unsigned char>(256.0 * value);
         }
 
+        /**
+        * Iteratores through the loaded float buffer and converts each color channel to a byte.
+        */
         void convert_to_bytes() {
             int total_bytes = image_width * image_height * bytes_per_pixel;
             bdata = new unsigned char[total_bytes];
@@ -71,6 +83,10 @@ class RtwImage {
             STBI_FREE(fdata);
         }
 
+        /**
+        * Calls stbi_loadf and requests RGB, if successful, it populates the width/height dimensions. Then, it precomputes
+        * bytes per scanline, converts it to bytes, and returns true;
+        */
         bool load(const std::string& filename) {
             int n = bytes_per_pixel;
             fdata = stbi_loadf(filename.c_str(), &image_width, &image_height, &n, bytes_per_pixel);
@@ -81,9 +97,13 @@ class RtwImage {
             return true;
         }
 
+        // Grab dimensions if fdata available.
         int width() const { return (fdata == nullptr) ? 0 : image_width; }
         int height() const { return (fdata == nullptr) ? 0 : image_height; }
 
+        /**
+        * Calculates the memory pointer offset to the RGB byte array for a pixel (x, y).
+        */
         const unsigned char* pixel_data(int x, int y) const {
             static unsigned char magenta[] = { 255, 0, 255 };
             if (bdata == nullptr) return magenta;

@@ -23,11 +23,17 @@ class HittableList : public Hittable {
 
         void clear() { objects.clear(); }
 
+        /**
+        * Adds a new Hittable instance to the list.
+        */
         void add(shared_ptr<Hittable> object) {
             objects.push_back(object);
             bbox = Aabb(bbox, object->bounding_box());
         }
 
+        /**
+        * Intersects a ray against every object in the list to find the closest hit point.
+        */
         bool hit(const Ray& r, Interval ray_t, HitRecord& rec) const override {
             HitRecord temp_rec;
             bool hit_anything = false;

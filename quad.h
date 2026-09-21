@@ -5,6 +5,9 @@
 #include "hittable.h"
 #include "hittable_list.h"
 
+/**
+* Represents a 2D parallelogram as an object.
+*/
 class Quad : public Hittable {
     private:
         Point3 Q;
@@ -15,6 +18,9 @@ class Quad : public Hittable {
         Vec3 normal;
         double D;
     public:
+        /**
+        * Computes the unit nromal vector, plane constant D, helper w, and sets the bounding box.
+        */
         Quad(const Point3& Q, const Vec3& u, const Vec3& v, shared_ptr<Material> mat) : Q(Q), u(u), v(v), mat(mat) {
             Vec3 n = cross(u, v);
             normal = unit_vector(n);
@@ -24,6 +30,9 @@ class Quad : public Hittable {
             set_bounding_box();
         }
 
+        /**
+        * Computes the bounding box for a 2D surface.
+        */
         virtual void set_bounding_box() {
             Aabb bbox_diagonal1 = Aabb(Q, Q + u + v);
             Aabb bbox_diagonal2 = Aabb(Q + u, Q + v);
@@ -32,6 +41,10 @@ class Quad : public Hittable {
 
         Aabb bounding_box() const override { return bbox; }
 
+        /**
+        * Determines if a ray intersects the quad plane within distance ray_t and
+        * lies inside its 2D surface boundary. 
+        */
         bool hit(const Ray& r, Interval ray_t, HitRecord& rec) const override {
             double denom = dot(normal, r.direction());
 
@@ -57,6 +70,9 @@ class Quad : public Hittable {
             return true;
         }
 
+        /**
+        * Evaluates if the planar coords lie within the valid bounds of the shape.
+        */
         virtual bool is_interior(double a, double b, HitRecord& rec) const {
             Interval unit_interval = Interval(0, 1);
 
@@ -70,6 +86,9 @@ class Quad : public Hittable {
         }
 };
 
+/**
+* Constructs an axis-aligned 3D box between opposite corners a and b.
+*/
 inline shared_ptr<HittableList> box(const Point3& a, const Point3& b, shared_ptr<Material> mat) {
     shared_ptr<HittableList> sides = make_shared<HittableList>();
 

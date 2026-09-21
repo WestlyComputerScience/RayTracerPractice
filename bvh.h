@@ -7,43 +7,52 @@
 #include "hittable.h"
 #include "hittable_list.h"
 
+/**
+* Implements a Bounding Volume Hierarchy node, reducing ray-intersection time from O(N) to O(logN).
+* It builds a binary tree of bounding boxes by recursively partitioning primitives along their longest 
+* bounding box axis.
+*/
 class BvhNode : public Hittable {
     private:
         shared_ptr<Hittable> left;
         shared_ptr<Hittable> right;
         Aabb bbox;
 
+        /**
+        * Compares the minimum bounds of two Hittable objects along axis index.
+        */
         static bool box_compare(const shared_ptr<Hittable> a, const shared_ptr<Hittable> b, int axis_index) {
             Interval a_axis_interval = a->bounding_box().axis_interval(axis_index);
             Interval b_axis_interval = b->bounding_box().axis_interval(axis_index);
             return a_axis_interval.min < b_axis_interval.min;
         }
 
-        static bool box_x_compare(const shared_ptr<Hittable> a, const shared_ptr<Hittable> b) {
-            return box_compare(a, b, 0);
-        }
-
-        static bool box_y_compare(const shared_ptr<Hittable> a, const shared_ptr<Hittable> b) {
-            return box_compare(a, b, 1);
-        }
-
-        static bool box_z_compare(const shared_ptr<Hittable> a, const shared_ptr<Hittable> b) {
-            return box_compare(a, b, 2);
-        }
+        // Static helpers for sorting objects along the chosen splitted axis.
+        static bool box_x_compare(const shared_ptr<Hittable> a, const shared_ptr<Hittable> b) { return box_compare(a, b, 0); }
+        static bool box_y_compare(const shared_ptr<Hittable> a, const shared_ptr<Hittable> b) { return box_compare(a, b, 1); }
+        static bool box_z_compare(const shared_ptr<Hittable> a, const shared_ptr<Hittable> b) {return box_compare(a, b, 2); }
 
     public:
+        /**
+        * Takes a copy of HittableList and invokes the span-based constructor.
+        */
         BvhNode(HittableList list) : BvhNode(list.objects, 0, list.objects.size()) {
             // Small C++ thing here to note. The constructor (without span indices) will create an implicit copy
             // of the hittable list, which we'll modify. The lifetime of this copy extends only until the constructor exits.
             // For this implementation, it's ok since we only need to persist the resulting bounding volume hierarchy.
         }
 
+        /**
+        * Recursively builds the hierarchy over the sub-range.
+        */
         BvhNode(std::vector<shared_ptr<Hittable>>& objects, size_t start, size_t end) { 
+            // Iterates through objects in range to accumulate a combined Aabb.
             bbox = Aabb::empty;
             for (size_t object_index = start; object_index < end; object_index++) {
                 bbox = Aabb(bbox, objects[object_index]->bounding_box());
             }
 
+            // Decide the optimal sorting dimension
             int axis = bbox.longest_axis();
 
             auto comparator = (axis == 0) ? box_x_compare
@@ -52,12 +61,14 @@ class BvhNode : public Hittable {
 
             size_t object_span = end - start;
 
+            // Leaf construction
             if (object_span == 1) {
                 left = right = objects[start];
             } else if (object_span == 2) {
                 left = objects[start];
                 right = objects[start + 1];
             } else {
+                // Subtree partitioning
                 std::sort(std::begin(objects) + start, std::begin(objects) + end, comparator);
 
                 double mid = start + object_span / 2;
@@ -66,12 +77,16 @@ class BvhNode : public Hittable {
             }
         }
 
+        /**
+        * Evaluates ray-primitive intersection across the BVH tree.
+        */
         bool hit(const Ray& r, Interval ray_t, HitRecord& rec) const override {
-            if (!bbox.hit(r, ray_t)) return false;
+            if (!bbox.hit(r, ray_t)) return false; // return false if ray misses node's box
 
             bool hit_left = left->hit(r, ray_t, rec);
             bool hit_right = right->hit(r, Interval(ray_t.min, hit_left ? rec.t : ray_t.max), rec);
 
+            // return true if left/right child had a hit
             return hit_left || hit_right;
         }
 

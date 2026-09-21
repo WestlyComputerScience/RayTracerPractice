@@ -1,6 +1,10 @@
 #ifndef COMMON_CONSTANTS_H
 #define COMMON_CONSTANTS_H
 
+/**
+* A utility header used to aggregate common imports and methods.
+*/
+
 #include <cmath>
 #include <cstdlib>
 #include <iostream>

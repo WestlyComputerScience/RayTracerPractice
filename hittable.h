@@ -6,6 +6,8 @@
 
 class Material;
 
+// TODO FINISH!
+
 /**
 * A temporary container for collision details. Contains information like point, normal, material, ray paramater distance (t),
 * texture coords (u, v), and if the ray struct the exterior or interior surface.
