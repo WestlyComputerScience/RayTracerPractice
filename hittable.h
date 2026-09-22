@@ -6,8 +6,6 @@
 
 class Material;
 
-// TODO FINISH!
-
 /**
 * A temporary container for collision details. Contains information like point, normal, material, ray paramater distance (t),
 * texture coords (u, v), and if the ray struct the exterior or interior surface.
@@ -21,6 +19,9 @@ class HitRecord {
         double u, v;
         bool front_face;
 
+        /**
+        * Standardizes normal orientation. If dot product < 0, ray is outside object; otherwise, it's inside.
+        */
         void set_face_normal(const Ray& r, const Vec3& outward_normal) {
             front_face = dot(r.direction(), outward_normal) < 0;
             normal = front_face ? outward_normal : -outward_normal;
@@ -35,8 +36,14 @@ class Hittable {
     public:
         virtual ~Hittable() = default;
 
+        /**
+        * Determines if a ray intersects an object.
+        */
         virtual bool hit(const Ray& r, Interval ray_t, HitRecord& rec) const = 0;
 
+        /**
+        * Returns an Axis-Aligned Bounding Box enclosing the object, used for Bvhs.
+        */
         virtual Aabb bounding_box() const = 0;
 };
 
@@ -49,10 +56,16 @@ class Translate : public Hittable {
         Vec3 offset;
         Aabb bbox;
     public:
+        /**
+        * Translates an object in 3D space by an offset vector.
+        */
         Translate(shared_ptr<Hittable> object, const Vec3& offset) : object(object), offset(offset) {
             bbox = object->bounding_box() + offset;
         }
 
+        /**
+        * Calculates if a ray hit the translated object.
+        */
         bool hit(const Ray& r, Interval ray_t, HitRecord& rec) const override {
             // move ray backwards by offset
             Ray offset_r(r.origin() - offset, r.direction(), r.time());
@@ -92,6 +105,9 @@ class RotateY : public Hittable {
         double cos_theta;
         Aabb bbox;
     public:
+        /**
+        * Rotates an object around the Y-axis by angle theta.
+        */
         RotateY(shared_ptr<Hittable> object, double angle) : object(object) {
             // store original bounds
             double radians = degrees_to_radians(angle);
@@ -127,6 +143,9 @@ class RotateY : public Hittable {
             bbox = Aabb(min, max);
         }
 
+        /**
+        * Calculates if a ray hit the rotated object.
+        */
         bool hit(const Ray& r, Interval ray_t, HitRecord& rec) const override {
             // transform the ray from world space to object space
             Point3 origin = Point3(

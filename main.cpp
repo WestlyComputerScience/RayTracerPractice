@@ -8,6 +8,10 @@
 #include "triangle.h"
 #include "quad.h"
 
+/**
+* The main class used to setup ray tracer scenarios.
+*/
+
 void set_camera(HittableList& world, bool isDefaultLight) {
     Camera cam;
 
