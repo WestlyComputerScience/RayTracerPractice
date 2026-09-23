@@ -365,6 +365,34 @@ void final_chapt2_scene(int image_width, int samples_per_pixel, int max_depth) {
     cam.render(world);
 }
 
+void render_blender_triangle_mesh() {
+    HittableList world;
+
+    shared_ptr<Material> red_mat = std::make_shared<Lambertian>(Color(0.8, 0.2, 0.2));
+
+    if (load_object_mesh("models/cube.obj", world, red_mat)) {
+        shared_ptr<BvhNode> mesh_bvh = std::make_shared<BvhNode>(world);
+        world.add(mesh_bvh);
+    }
+
+    Camera cam;
+
+    cam.aspect_ratio = 1.0;
+    cam.image_width = 600;
+    cam.samples_per_pixel = 100;
+    cam.max_ray_bounces = 20;
+    cam.background = Color(0,0,0);
+
+    cam.vfov = 40;
+    cam.lookfrom = Point3(278, 278, -800);
+    cam.lookat = Point3(278, 278, 0);
+    cam.vup = Vec3(0,1,0);
+
+    cam.defocus_angle = 0;
+
+    cam.render(world);
+}
+
 int main() {
     switch (12) {
         case 1: bouncing_spheres(); break;

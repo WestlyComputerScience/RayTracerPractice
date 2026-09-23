@@ -99,4 +99,47 @@ class Triangle : public Hittable {
         Aabb bounding_box() const override { return bbox; }
 };
 
+/**
+* Loads a triangle mesh from tiny_obj_loader.
+*/
+bool load_object_mesh(const std::string& filename, HittableList& scene, std::shared_ptr<Material> mat) {
+    tinyobj::attrib_t attrib;
+    std::vector<tinyobj::shape_t> shapes;
+    std::vector<tinyobj::material_t> materials;
+    std::string warn, err;
+
+    // Load the object file
+    bool ret = tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, filename.c_str());
+
+    if (!warn.empty()) std::cout << "tinyobj warning: "<< warn << std::endl;
+    if (!err.empty()) std::cerr << "tinyobj error: " << err << std::endl;
+    if (!ret) return false;
+
+    // Iterate over all the shapes in the file
+    for (const auto& shape : shapes) {
+        size_t index_offset = 0;
+
+        // Iterate over all the faces in the shape
+        for (int f = 0; f < shape.mesh.num_face_vertices.size(); f++) {
+            int fv = shape.mesh.num_face_vertices[f];
+
+            // Ensure the face is a triangle
+            if (fv == 3) {
+                tinyobj::index_t idx0 = shape.mesh.indices[index_offset];
+                tinyobj::index_t idx1 = shape.mesh.indices[index_offset + 1];
+                tinyobj::index_t idx2 = shape.mesh.indices[index_offset + 2];
+
+                // Get the vertex positions
+                Point3 p0(attrib.vertices[3 * idx0.vertex_index], attrib.vertices[3 * idx0.vertex_index + 1], attrib.vertices[3 * idx0.vertex_index + 2]);
+                Point3 p1(attrib.vertices[3 * idx1.vertex_index], attrib.vertices[3 * idx1.vertex_index + 1], attrib.vertices[3 * idx1.vertex_index + 2]);
+                Point3 p2(attrib.vertices[3 * idx2.vertex_index], attrib.vertices[3 * idx2.vertex_index + 1], attrib.vertices[3 * idx2.vertex_index + 2]);
+
+                scene.add(std::make_shared<Triangle>(p0, p1, p2, mat));
+            }
+            index_offset += fv;
+        }
+    }
+    return true;
+}
+
 #endif
