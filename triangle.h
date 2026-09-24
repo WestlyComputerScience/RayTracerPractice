@@ -2,6 +2,7 @@
 #define TRIANGLE_H
 
 #include "common_constants.h"
+#include "external/tiny_obj_loader.h"
 
 /**
 * Implementation of a triangle.
@@ -103,24 +104,30 @@ class Triangle : public Hittable {
 * Loads a triangle mesh from tiny_obj_loader.
 */
 bool load_object_mesh(const std::string& filename, HittableList& scene, std::shared_ptr<Material> mat) {
-    tinyobj::attrib_t attrib;
-    std::vector<tinyobj::shape_t> shapes;
-    std::vector<tinyobj::material_t> materials;
-    std::string warn, err;
+    tinyobj::ObjReaderConfig reader_config;
+    reader_config.mtl_search_path = "";
 
-    // Load the object file
-    bool ret = tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, filename.c_str());
+    tinyobj::ObjReader reader;
 
-    if (!warn.empty()) std::cout << "tinyobj warning: "<< warn << std::endl;
-    if (!err.empty()) std::cerr << "tinyobj error: " << err << std::endl;
-    if (!ret) return false;
+    // Attempts to open the file and parse the text tokens from an obj file to binary mesh data
+    if (!reader.ParseFromFile(filename, reader_config)) {
+        // Checks for any error string that tinyobjloader generated mentioning why parsing failed
+        if (!reader.Error().empty()) {
+            std::cerr << "tinyobj error: " << reader.Error() << std::endl;
+        }
+        return false; // Parsing error
+    }
+
+    // get the attributes and shapes from the object file
+    const tinyobj::attrib_t& attrib = reader.GetAttrib();
+    const std::vector<tinyobj::shape_t>& shapes = reader.GetShapes();
 
     // Iterate over all the shapes in the file
     for (const auto& shape : shapes) {
         size_t index_offset = 0;
 
         // Iterate over all the faces in the shape
-        for (int f = 0; f < shape.mesh.num_face_vertices.size(); f++) {
+        for (size_t f = 0; f < shape.mesh.num_face_vertices.size(); f++) {
             int fv = shape.mesh.num_face_vertices[f];
 
             // Ensure the face is a triangle

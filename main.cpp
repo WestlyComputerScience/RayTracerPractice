@@ -1,3 +1,12 @@
+#define TINYOBJLOADER_IMPLEMENTATION
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-function"
+#include "external/tiny_obj_loader.h"
+#pragma GCC diagnostic pop
+
+#include "external/tiny_obj_loader.h"
+
 #include "common_constants.h"
 #include "camera.h"
 #include "constant_medium.h"
@@ -367,25 +376,25 @@ void final_chapt2_scene(int image_width, int samples_per_pixel, int max_depth) {
 
 void render_blender_triangle_mesh() {
     HittableList world;
-
+    HittableList mesh_objects;
     shared_ptr<Material> red_mat = std::make_shared<Lambertian>(Color(0.8, 0.2, 0.2));
 
-    if (load_object_mesh("models/cube.obj", world, red_mat)) {
-        shared_ptr<BvhNode> mesh_bvh = std::make_shared<BvhNode>(world);
+    if (load_object_mesh("models/cube.obj", mesh_objects, red_mat)) {
+        auto mesh_bvh = std::make_shared<BvhNode>(mesh_objects);
         world.add(mesh_bvh);
     }
 
     Camera cam;
 
     cam.aspect_ratio = 1.0;
-    cam.image_width = 600;
+    cam.image_width = 400;
     cam.samples_per_pixel = 100;
     cam.max_ray_bounces = 20;
-    cam.background = Color(0,0,0);
+    cam.background = Color(0.7, 0.8, 1.0);
 
     cam.vfov = 40;
-    cam.lookfrom = Point3(278, 278, -800);
-    cam.lookat = Point3(278, 278, 0);
+    cam.lookfrom = Point3(3, 3, 5);
+    cam.lookat = Point3(0, 1, 0);
     cam.vup = Vec3(0,1,0);
 
     cam.defocus_angle = 0;
@@ -394,7 +403,7 @@ void render_blender_triangle_mesh() {
 }
 
 int main() {
-    switch (12) {
+    switch (13) {
         case 1: bouncing_spheres(); break;
         case 2: checkered_spheres(); break;
         case 3: moon(); break;
@@ -407,5 +416,6 @@ int main() {
         case 10: cornell_box(); break;
         case 11: cornell_smoke(); break;
         case 12: final_chapt2_scene(800, 10000, 40); break;
+        case 13: render_blender_triangle_mesh(); break;
     }
 }
