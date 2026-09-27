@@ -19,7 +19,7 @@ class Color {
         /**
         * Create a color given RGB.
         */
-        Color(double r, double g, double b) : v(r, g, b) {}
+        Color(real r, real g, real b) : v(r, g, b) {}
 
         /**
         * Wraps an existing vector into a color object.
@@ -27,13 +27,13 @@ class Color {
         explicit Color(const Vec3& vec) : v(vec) {}
 
         // RGB getters
-        double r() const { return v.x(); }
-        double g() const { return v.y(); }
-        double b() const { return v.z(); }
+        real r() const { return v.x(); }
+        real g() const { return v.y(); }
+        real b() const { return v.z(); }
 
         // Standard vector operations.
         Color operator+(const Color& c) const { return Color(v + c.v); }
-        Color operator*(double t) const { return Color(t * v); }
+        Color operator*(real t) const { return Color(t * v); }
         Color operator*(const Color& c) const { return Color(this->r() * c.r(), this->g() * c.g(), this->b() * c.b()); }
         Color& operator+=(const Color& e) {
             v[0] += e.v[0];
@@ -52,7 +52,7 @@ class Color {
         /**
         * Outputs a color within a picked range.
         */
-        static Color random(double min, double max) {
+        static Color random(real min, real max) {
             return Color(Vec3::random(min, max));
         }
 };
@@ -60,7 +60,7 @@ class Color {
 /**
 * Scalar multiplication support.
 */
-inline Color operator*(double t, const Color& c) {
+inline Color operator*(real t, const Color& c) {
     return c * t;
 }
 
@@ -68,7 +68,7 @@ inline Color operator*(double t, const Color& c) {
 /**
 * Converts a linear light component into gamma space.
 */
-inline double linear_to_gamma(double linear_component) {
+inline real linear_to_gamma(real linear_component) {
     if (linear_component > 0) {
         return std::sqrt(linear_component);
     }
@@ -79,9 +79,9 @@ inline double linear_to_gamma(double linear_component) {
 * Formats and writes a single pixel's RGB data to an output stream in PPM format.
 */
 inline void write_color(std::ostream& out, const Color& pixel_color) {
-    double r = pixel_color.r();
-    double g = pixel_color.g();
-    double b = pixel_color.b();
+    real r = pixel_color.r();
+    real g = pixel_color.g();
+    real b = pixel_color.b();
 
     r = linear_to_gamma(r);
     g = linear_to_gamma(g);

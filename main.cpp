@@ -54,8 +54,8 @@ void make_ray_tracing_in_one_weekend_cover(HittableList& world) {
 
     for (int a = -11; a < 11; a++) {
         for (int b = -11; b < 11; b++) {
-            double choose_mat = random_double();
-            Point3 center(a + 0.9 * random_double(), 0.2, b + 0.9 * random_double());
+            real choose_mat = random_real();
+            Point3 center(a + 0.9 * random_real(), 0.2, b + 0.9 * random_real());
 
             if ((center - Point3(4, 0.2, 0)).length() > 0.9) {
                 shared_ptr<Material> sphere_material;
@@ -70,12 +70,12 @@ void make_ray_tracing_in_one_weekend_cover(HittableList& world) {
                     Color albedo = Color::random() * Color::random();
                     sphere_material = make_shared<Lambertian>(albedo);
                     world.add(make_shared<Sphere>(center, 0.2, sphere_material));
-                    Point3 center2 = center + Vec3(0, random_double(0, 0.5), 0);
+                    Point3 center2 = center + Vec3(0, random_real(0, 0.5), 0);
                     world.add(make_shared<Sphere>(center, center2, 0.2, sphere_material));
                 } else if (choose_mat < 0.95) {
                     // metal
                     Color albedo = Color::random(0.5, 1);
-                    double fuzz = random_double(0, 0.5);
+                    real fuzz = random_real(0, 0.5);
                     sphere_material = make_shared<Metal>(albedo, fuzz);
                     world.add(make_shared<Sphere>(center, 0.2, sphere_material));
                 } else {
@@ -309,13 +309,13 @@ void final_chapt2_scene(int image_width, int samples_per_pixel, int max_depth) {
     int boxes_per_side = 20;
     for (int i = 0; i < boxes_per_side; i++) {
         for (int j = 0; j < boxes_per_side; j++) {
-            double w = 100.0;
-            double x0 = -1000.0 + i * w;
-            double z0 = -1000.0 + j * w;
-            double y0 = 0.0;
-            double x1 = x0 + w;
-            double y1 = random_double(1, 101);
-            double z1 = z0 + w;
+            real w = 100.0;
+            real x0 = -1000.0 + i * w;
+            real z0 = -1000.0 + j * w;
+            real y0 = 0.0;
+            real x1 = x0 + w;
+            real y1 = random_real(1, 101);
+            real z1 = z0 + w;
 
             boxes1.add(box(Point3(x0, y0, z0), Point3(x1, y1, z1), ground));
         }

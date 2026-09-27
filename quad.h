@@ -16,7 +16,7 @@ class Quad : public Hittable {
         shared_ptr<Material> mat;
         Aabb bbox;
         Vec3 normal;
-        double D;
+        real D;
     public:
         /**
         * Computes the unit nromal vector, plane constant D, helper w, and sets the bounding box.
@@ -46,18 +46,18 @@ class Quad : public Hittable {
         * lies inside its 2D surface boundary. 
         */
         bool hit(const Ray& r, Interval ray_t, HitRecord& rec) const override {
-            double denom = dot(normal, r.direction());
+            real denom = dot(normal, r.direction());
 
             if (std::fabs(denom) < 1e-8) return false; // no hit if ray is parallel to the plane
 
-            double t = (D - dot(normal, r.origin())) / denom;
+            real t = (D - dot(normal, r.origin())) / denom;
             if (!ray_t.contains(t)) return false; // if the hit point param t is outside ray interval
 
             // determine if the hit lies within the planear shape using it's coords
             Point3 intersection = r.at(t);
             Vec3 planar_hitpt_vector = intersection - Q;
-            double alpha = dot(w, cross(planar_hitpt_vector, v));
-            double beta = dot(w, cross(u, planar_hitpt_vector));
+            real alpha = dot(w, cross(planar_hitpt_vector, v));
+            real beta = dot(w, cross(u, planar_hitpt_vector));
 
             if (!is_interior(alpha, beta, rec)) return false;
 
@@ -73,7 +73,7 @@ class Quad : public Hittable {
         /**
         * Evaluates if the planar coords lie within the valid bounds of the shape.
         */
-        virtual bool is_interior(double a, double b, HitRecord& rec) const {
+        virtual bool is_interior(real a, real b, HitRecord& rec) const {
             Interval unit_interval = Interval(0, 1);
 
             // Given the hit point in plane coords, return false if it's outside the primitive.

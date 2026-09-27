@@ -13,19 +13,19 @@
 class ConstantMedium : public Hittable {
     private:
         shared_ptr<Hittable> boundary;
-        double neg_inv_density;
+        real neg_inv_density;
         shared_ptr<Material> phase_function;
     public:
         /**
         * Initializes the volume using a procedural/image-based texture for scattering albedo.
         */
-        ConstantMedium(shared_ptr<Hittable> boundary, double density, shared_ptr<Texture> tex) : boundary(boundary), 
+        ConstantMedium(shared_ptr<Hittable> boundary, real density, shared_ptr<Texture> tex) : boundary(boundary), 
             neg_inv_density(-1 / density), phase_function(make_shared<Isotropic>(tex)) {}
         
         /**
         * Initializes the volume using a constant color for scattering albedo.
         */
-        ConstantMedium(shared_ptr<Hittable> boundary, double density, const Color& albedo) : boundary(boundary), 
+        ConstantMedium(shared_ptr<Hittable> boundary, real density, const Color& albedo) : boundary(boundary), 
             neg_inv_density(-1 / density), phase_function(make_shared<Isotropic>(albedo)) {}
 
         /**
@@ -47,9 +47,9 @@ class ConstantMedium : public Hittable {
             if (rec1.t < 0) rec1.t = 0;
 
             // Calculates total distance traveled inside the boundary
-            double ray_length = r.direction().length();
-            double distance_inside_boundary = (rec2.t - rec1.t) * ray_length;
-            double hit_distance = neg_inv_density * std::log(random_double());
+            real ray_length = r.direction().length();
+            real distance_inside_boundary = (rec2.t - rec1.t) * ray_length;
+            real hit_distance = neg_inv_density * std::log(random_real());
 
             // Has chance to completely pass through the volume
             if (hit_distance > distance_inside_boundary) return false;

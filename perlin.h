@@ -39,13 +39,13 @@ class Perlin {
         * Taking a fractional position of a point inside a 3D cube, it computes the gradient 
         * influence from all 8 corners.
         */
-        static double perlin_interp(Vec3 c[2][2][2], double u, double v, double w) {
+        static real perlin_interp(Vec3 c[2][2][2], real u, real v, real w) {
             // Hermitian Smoothing: Instead of connecting the points in straight lines, the Hermite algorithm factors in
             // both the target coordinate positions and the specified slopes/tangents (3x^2 - 2x^3).
-            double uu = u * u * (3 - 2* u);
-            double vv = v * v * (3 - 2* v);
-            double ww = w * w * (3 - 2 * w);
-            double accum = 0.0;
+            real uu = u * u * (3 - 2* u);
+            real vv = v * v * (3 - 2* v);
+            real ww = w * w * (3 - 2 * w);
+            real accum = 0.0;
 
             for (int i = 0; i < 2; i++) {
                 for (int j = 0; j < 2; j++) {
@@ -78,11 +78,11 @@ class Perlin {
         /**
         * Evaluates noise at a given point.
         */
-        double noise (const Point3& p) const {
+        real noise (const Point3& p) const {
             // Get fractional offsets.
-            double u = p.x() - std::floor(p.x());
-            double v = p.y() - std::floor(p.y());
-            double w = p.z() - std::floor(p.z());
+            real u = p.x() - std::floor(p.x());
+            real v = p.y() - std::floor(p.y());
+            real w = p.z() - std::floor(p.z());
 
             // Floor coords to integer cell indicies.
             int i = int(std::floor(p.x()));
@@ -105,10 +105,10 @@ class Perlin {
         /**
         * Computes the fractal noise by combining multiple noises.
         */
-        double turb(const Point3& p, int depth) const {
-            double accum = 0.0;
+        real turb(const Point3& p, int depth) const {
+            real accum = 0.0;
             Point3 temp_p = p;
-            double weight = 1.0;
+            real weight = 1.0;
 
             for (int i = 0; i < depth; i++) {
                 accum += weight * noise(temp_p);

@@ -15,8 +15,8 @@ class HitRecord {
         Point3 p;
         Vec3 normal;
         shared_ptr<Material> mat;
-        double t;
-        double u, v;
+        real t;
+        real u, v;
         bool front_face;
 
         /**
@@ -101,16 +101,16 @@ class Translate : public Hittable {
 class RotateY : public Hittable {
     private:
         shared_ptr<Hittable> object;
-        double sin_theta;
-        double cos_theta;
+        real sin_theta;
+        real cos_theta;
         Aabb bbox;
     public:
         /**
         * Rotates an object around the Y-axis by angle theta.
         */
-        RotateY(shared_ptr<Hittable> object, double angle) : object(object) {
+        RotateY(shared_ptr<Hittable> object, real angle) : object(object) {
             // store original bounds
-            double radians = degrees_to_radians(angle);
+            real radians = degrees_to_radians(angle);
             sin_theta = std::sin(radians);
             cos_theta = std::cos(radians);
             bbox = object->bounding_box();
@@ -122,12 +122,12 @@ class RotateY : public Hittable {
             for (int i = 0; i < 2; i++) {
                 for (int j = 0; j < 2; j++) {
                     for (int k = 0; k < 2; k++) {
-                        double x = i * bbox.x.max + (1 - i) * bbox.x.min;
-                        double y = j * bbox.y.max + (1 - j) * bbox.y.min;
-                        double z = k * bbox.z.max + (1 - k) * bbox.z.min;
+                        real x = i * bbox.x.max + (1 - i) * bbox.x.min;
+                        real y = j * bbox.y.max + (1 - j) * bbox.y.min;
+                        real z = k * bbox.z.max + (1 - k) * bbox.z.min;
 
-                        double newX = cos_theta * x + sin_theta * z;
-                        double newZ = -sin_theta * x + cos_theta * z;
+                        real newX = cos_theta * x + sin_theta * z;
+                        real newZ = -sin_theta * x + cos_theta * z;
 
                         Vec3 tester(newX, y, newZ);
 

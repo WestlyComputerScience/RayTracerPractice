@@ -10,7 +10,7 @@
 class Camera {
     private:
         int image_height;
-        double pixel_samples_scale; // used at the end of rendering to calculate averahe accumulated color samples
+        real pixel_samples_scale; // used at the end of rendering to calculate averahe accumulated color samples
         Point3 center; // cameras focal origin point in world space
         Point3 pixel00_loc; // 3D space coord corresponding to the center of the top pixel (0, 0)
         Vec3 pixel_delta_u; // 3D displacement vectors u, v, between 2 adjacent horizontal/verticle vectors
@@ -32,10 +32,10 @@ class Camera {
             center = lookfrom;
 
             // veiwpoint dimensioning
-            double theta = degrees_to_radians(vfov);
-            double h = std::tan(theta/2);
-            double viewport_height = 2 * h * focus_dist;
-            double viewport_width = viewport_height * (double(image_width)/image_height);
+            real theta = degrees_to_radians(vfov);
+            real h = std::tan(theta/2);
+            real viewport_height = 2 * h * focus_dist;
+            real viewport_width = viewport_height * (real(image_width)/image_height);
 
             // camera orientation vectors
             w = unit_vector(lookfrom - lookat);
@@ -53,7 +53,7 @@ class Camera {
             pixel00_loc = viewport_upper_left + 0.5 * (pixel_delta_u + pixel_delta_v);
 
             // thin-lens aperture
-            double defocus_radius = focus_dist * std::tan(degrees_to_radians(defocus_angle / 2));
+            real defocus_radius = focus_dist * std::tan(degrees_to_radians(defocus_angle / 2));
             defocus_disk_u = u * defocus_radius;
             defocus_disk_v = v * defocus_radius;
         }
@@ -66,7 +66,7 @@ class Camera {
             Point3 pixel_sample = pixel00_loc + ((i + offset.x()) * pixel_delta_u) + ((j + offset.y()) * pixel_delta_v);
             Point3 ray_origin = (defocus_angle <= 0) ? center : defocus_disk_sample();
             Vec3 ray_direction = pixel_sample - ray_origin;
-            double ray_time = random_double();
+            real ray_time = random_real();
             return Ray(ray_origin, ray_direction, ray_time);
         }
 
@@ -75,7 +75,7 @@ class Camera {
         * side lengths (-0.5, 0.5)
         */
         Vec3 sample_square() const {
-            return Vec3(random_double() - 0.5, random_double() - 0.5, 0);
+            return Vec3(random_real() - 0.5, random_real() - 0.5, 0);
         }
 
         /**
@@ -113,13 +113,13 @@ class Camera {
         }
 
     public:
-        double aspect_ratio = 1.0; // ratio of image width to height
+        real aspect_ratio = 1.0; // ratio of image width to height
         int image_width = 100;
         int samples_per_pixel = 10; // num of randomized antialiasing ray samples per pixel
         int max_ray_bounces = 10; // maximum allowed depth for recursive bounce paths
-        double vfov = 90; // vertical field of view
-        double defocus_angle = 0; // disk aperture angle for depth-of-field
-        double focus_dist = 10; // distance from lens origin to focus plane
+        real vfov = 90; // vertical field of view
+        real defocus_angle = 0; // disk aperture angle for depth-of-field
+        real focus_dist = 10; // distance from lens origin to focus plane
         Point3 lookfrom = Point3(0, 0, 0); // camera position to world coords
         Point3 lookat = Point3(0, 0, -1); // target point camera looks toward
         Vec3 vup = Vec3(0, 1, 0); // upward orientation reference vector

@@ -37,7 +37,7 @@ class HittableList : public Hittable {
         bool hit(const Ray& r, Interval ray_t, HitRecord& rec) const override {
             HitRecord temp_rec;
             bool hit_anything = false;
-            double closest_so_far = ray_t.max;
+            real closest_so_far = ray_t.max;
 
             for (const shared_ptr<Hittable>& object : objects) { // tests all objects for each ray
                 if (object->hit(r, Interval(ray_t.min, closest_so_far), temp_rec)) {

@@ -10,7 +10,7 @@ class Ray {
     private:
         Point3 orig;
         Vec3 dir;
-        double tm;
+        real tm;
         
     public:
         Ray() {}
@@ -18,7 +18,7 @@ class Ray {
         /**
         * Initializes origin, direction, and time for a ray.
         */
-        Ray(const Point3& origin, const Vec3& direction, double time) : orig(origin), dir(direction), tm(time) {}
+        Ray(const Point3& origin, const Vec3& direction, real time) : orig(origin), dir(direction), tm(time) {}
 
         /**
         * Initializes origin and direction for a ray.
@@ -28,12 +28,12 @@ class Ray {
         const Point3& origin() const { return orig; }
         const Vec3& direction() const { return dir; }
 
-        double time() const { return tm; }
+        real time() const { return tm; }
 
         /**
         * Grabs 3D position P(t) along the ray at param distance t.
         */
-        Point3 at(double t) const {
+        Point3 at(real t) const {
             return orig + t * dir;
         }
 };

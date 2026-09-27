@@ -71,7 +71,7 @@ class BvhNode : public Hittable {
                 // Subtree partitioning
                 std::sort(std::begin(objects) + start, std::begin(objects) + end, comparator);
 
-                double mid = start + object_span / 2;
+                real mid = start + object_span / 2;
                 left = make_shared<BvhNode>(objects, start, mid);
                 right = make_shared<BvhNode>(objects, mid, end);
             }

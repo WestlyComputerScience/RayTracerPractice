@@ -10,14 +10,14 @@
 class Sphere : public Hittable {
     private:
         Ray center;
-        double radius;
+        real radius;
         shared_ptr<Material> mat;
         Aabb bbox; // Bounding Box
     public:
         /**
         * Builds a stationary sphere.
         */
-        Sphere(const Point3& static_center, double radius, std::shared_ptr<Material> mat) 
+        Sphere(const Point3& static_center, real radius, std::shared_ptr<Material> mat) 
         : center(static_center, Vec3(0, 0, 0)), radius(std::fmax(0, radius)), mat(mat) {
             Vec3 rvec = Vec3(radius, radius, radius);
             bbox = Aabb(static_center - rvec, static_center + rvec);
@@ -26,7 +26,7 @@ class Sphere : public Hittable {
         /**
         * Builds a moving sphere traveling between 2 points.
         */
-        Sphere(const Point3& center1, const Point3& center2, double radius, std::shared_ptr<Material> mat) 
+        Sphere(const Point3& center1, const Point3& center2, real radius, std::shared_ptr<Material> mat) 
         : center(center1, center2 - center1), radius(std::fmax(0, radius)), mat(mat) {
             Vec3 rvec = Vec3(radius, radius, radius);
             Aabb box1(center.at(0) - rvec, center.at(0) + rvec);
@@ -42,18 +42,18 @@ class Sphere : public Hittable {
             Vec3 oc = current_center - r.origin();
 
             // evaluates the discriminant
-            double a = r.direction().length_squared();
-            double h = dot(r.direction(), oc);
-            double c = oc.length_squared() - radius * radius;
-            double discriminant = h * h - a * c;
+            real a = r.direction().length_squared();
+            real h = dot(r.direction(), oc);
+            real c = oc.length_squared() - radius * radius;
+            real discriminant = h * h - a * c;
 
             if (discriminant < 0) {
                 return false;
             }
 
-            double sqrtd = std::sqrt(discriminant);
+            real sqrtd = std::sqrt(discriminant);
 
-            double root = (h - sqrtd) / a; // closer side of sphere
+            real root = (h - sqrtd) / a; // closer side of sphere
             if (!ray_t.surrounds(root)) {
                 root = (h + sqrtd) / a; // farther side
                 if (!ray_t.surrounds(root)) {
@@ -77,9 +77,9 @@ class Sphere : public Hittable {
         /**
         * Converts a uniot sphere surface vector into a 2D UV texture
         */
-        static void get_sphere_uv(const Point3& p, double& u, double& v) {
-            double theta = std::acos(-p.y());
-            double phi = std::atan2(-p.z(), p.x()) + pi;
+        static void get_sphere_uv(const Point3& p, real& u, real& v) {
+            real theta = std::acos(-p.y());
+            real phi = std::atan2(-p.z(), p.x()) + pi;
 
             u = phi / (2 * pi);
             v = theta / pi;

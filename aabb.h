@@ -12,7 +12,7 @@ class Aabb {
         * Checks if the size of an interval is less than 0.0001
         */
         void pad_to_minimums() {
-            double delta = 0.0001;
+            real delta = 0.0001;
             if (x.size() < delta) x = x.expand(delta);
             if (y.size() < delta) y = y.expand(delta);
             if (z.size() < delta) z = z.expand(delta);
@@ -70,11 +70,11 @@ class Aabb {
             for (int axis = 0; axis < 3; axis++) {
                 // Grab inverse ray direction.
                 const Interval& ax = axis_interval(axis);
-                const double adinv = 1.0 / ray_dir[axis];
+                const real adinv = 1.0 / ray_dir[axis];
 
                 // Calculates parametric ray intersection distances.
-                double t0 = (ax.min - ray_orig[axis]) * adinv;
-                double t1 = (ax.max - ray_orig[axis]) * adinv;
+                real t0 = (ax.min - ray_orig[axis]) * adinv;
+                real t1 = (ax.max - ray_orig[axis]) * adinv;
 
                 // Narrows down the parametric interval.
                 if (t0 < t1) {
