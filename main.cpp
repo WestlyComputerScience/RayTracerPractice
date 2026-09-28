@@ -16,6 +16,7 @@
 #include "bvh.h"
 #include "triangle.h"
 #include "quad.h"
+#include "spectrum.h"
 
 /**
 * The main class used to setup ray tracer scenarios.
@@ -403,19 +404,28 @@ void render_blender_triangle_mesh() {
 }
 
 int main() {
-    switch (13) {
-        case 1: bouncing_spheres(); break;
-        case 2: checkered_spheres(); break;
-        case 3: moon(); break;
-        case 4: perlin_spheres(); break;
-        case 5: triangles(); break;
-        case 6: hat(); break;
-        case 7: poop_emoji(); break;
-        case 8: quads(); break;
-        case 9: simple_light(); break;
-        case 10: cornell_box(); break;
-        case 11: cornell_smoke(); break;
-        case 12: final_chapt2_scene(800, 10000, 40); break;
-        case 13: render_blender_triangle_mesh(); break;
-    }
+    CIE1931 cie;
+    Spectrum spectrum(1.0);
+
+    XYZ xyz = spectrum.toXYZ(cie);
+
+    std::cout << "X = " << xyz.x << '\n';
+    std::cout << "Y = " << xyz.y << '\n';
+    std::cout << "Z = " << xyz.z << '\n';
+
+    // switch (13) {
+    //     case 1: bouncing_spheres(); break;
+    //     case 2: checkered_spheres(); break;
+    //     case 3: moon(); break;
+    //     case 4: perlin_spheres(); break;
+    //     case 5: triangles(); break;
+    //     case 6: hat(); break;
+    //     case 7: poop_emoji(); break;
+    //     case 8: quads(); break;
+    //     case 9: simple_light(); break;
+    //     case 10: cornell_box(); break;
+    //     case 11: cornell_smoke(); break;
+    //     case 12: final_chapt2_scene(800, 10000, 40); break;
+    //     case 13: render_blender_triangle_mesh(); break;
+    // }
 }
