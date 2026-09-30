@@ -66,13 +66,14 @@ inline Color operator*(real t, const Color& c) {
 
 
 /**
-* Converts a linear light component into gamma space.
+* Converts a linear light component into gamma space. TODO: update description
 */
 inline real linear_to_gamma(real linear_component) {
-    if (linear_component > 0) {
-        return std::sqrt(linear_component);
+    if (linear_component <= 0.0031308) {
+        return 12.92 * linear_component;
     }
-    return 0;
+
+    return 1.055 * std::pow(linear_component, 1.0 / 2.4) - 0.055;
 }
 
 /**
