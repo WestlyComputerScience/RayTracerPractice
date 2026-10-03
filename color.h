@@ -69,11 +69,11 @@ inline Color operator*(real t, const Color& c) {
 * Converts a linear light component into gamma space. TODO: update description
 */
 inline real linear_to_gamma(real linear_component) {
-    if (linear_component <= 0.0031308) {
-        return 12.92 * linear_component;
+    if (linear_component > 0) {
+        return std::sqrt(linear_component);
     }
 
-    return 1.055 * std::pow(linear_component, 1.0 / 2.4) - 0.055;
+    return 0;
 }
 
 /**
@@ -83,6 +83,11 @@ inline void write_color(std::ostream& out, const Color& pixel_color) {
     real r = pixel_color.r();
     real g = pixel_color.g();
     real b = pixel_color.b();
+
+    // get the values between 0 and 1 for rgb output
+    // r = r / (r + 1.0);
+    // g = g / (g + 1.0);
+    // b = b / (b + 1.0);
 
     r = linear_to_gamma(r);
     g = linear_to_gamma(g);

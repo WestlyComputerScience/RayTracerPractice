@@ -403,24 +403,25 @@ void render_blender_triangle_mesh() {
     cam.render(world);
 }
 
+/*
 void test_wavelength(int wavelength, const CIE1931& cie) { Spectrum spectrum; int index = wavelength - 360; spectrum[index] = 1.0; XYZ xyz = spectrum.toXYZ(cie); Color color = xyz.toColor(); std::cout << "============================\n"; std::cout << wavelength << " nm\n"; std::cout << "============================\n"; std::cout << "XYZ:\n"; std::cout << "X = " << xyz.x << '\n'; std::cout << "Y = " << xyz.y << '\n'; std::cout << "Z = " << xyz.z << '\n'; std::cout << "\nLinear RGB:\n"; std::cout << "R = " << color.r() << '\n'; std::cout << "G = " << color.g() << '\n'; std::cout << "B = " << color.b() << '\n'; std::cout << '\n'; }
-
+*/
 int main() {
-    CIE1931 cie; test_wavelength(450, cie); test_wavelength(550, cie); test_wavelength(650, cie);
+    // CIE1931 cie; test_wavelength(450, cie); test_wavelength(550, cie); test_wavelength(650, cie);
 
-    // switch (13) {
-    //     case 1: bouncing_spheres(); break;
-    //     case 2: checkered_spheres(); break;
-    //     case 3: moon(); break;
-    //     case 4: perlin_spheres(); break;
-    //     case 5: triangles(); break;
-    //     case 6: hat(); break;
-    //     case 7: poop_emoji(); break;
-    //     case 8: quads(); break;
-    //     case 9: simple_light(); break;
-    //     case 10: cornell_box(); break;
-    //     case 11: cornell_smoke(); break;
-    //     case 12: final_chapt2_scene(800, 10000, 40); break;
-    //     case 13: render_blender_triangle_mesh(); break;
-    // }
+    switch (13) {
+        case 1: bouncing_spheres(); break;
+        case 2: checkered_spheres(); break;
+        case 3: moon(); break;
+        case 4: perlin_spheres(); break;
+        case 5: triangles(); break;
+        case 6: hat(); break;
+        case 7: poop_emoji(); break;
+        case 8: quads(); break;
+        case 9: simple_light(); break;
+        case 10: cornell_box(); break;
+        case 11: cornell_smoke(); break;
+        case 12: final_chapt2_scene(800, 10000, 40); break;
+        case 13: render_blender_triangle_mesh(); break;
+    }
 }

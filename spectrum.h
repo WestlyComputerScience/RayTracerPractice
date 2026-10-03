@@ -26,6 +26,7 @@ static constexpr int NUM_SAMPLES = (MAX_WAVELENGTH - MIN_WAVELENGTH) / WAVELENGT
 class Spectrum {
     private:
         real spectralValues[NUM_SAMPLES];
+        static constexpr real CIE_Y_INTEGRAL = 106.8568;
     public:
     /**
     * Creates a spectrum with all wavelengths at zero.
@@ -110,6 +111,9 @@ class Spectrum {
             result.y += spectralValues[i] * cie.y(lambda) * WAVELENGTH_STEP;
             result.z += spectralValues[i] * cie.z(lambda) * WAVELENGTH_STEP;
         }
+        result.x /= CIE_Y_INTEGRAL;
+        result.y /= CIE_Y_INTEGRAL;
+        result.z /= CIE_Y_INTEGRAL;
 
         return result;
     }

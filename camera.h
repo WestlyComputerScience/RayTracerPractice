@@ -11,6 +11,8 @@ class Camera {
     private:
         int image_height;
         real pixel_samples_scale; // used at the end of rendering to calculate averahe accumulated color samples
+        int sqrt_spp; // square root fo samples per pixel
+        real recip_sqrt_spp; // 1 / spp
         Point3 center; // cameras focal origin point in world space
         Point3 pixel00_loc; // 3D space coord corresponding to the center of the top pixel (0, 0)
         Vec3 pixel_delta_u; // 3D displacement vectors u, v, between 2 adjacent horizontal/verticle vectors
@@ -26,6 +28,10 @@ class Camera {
             // image height
             image_height = int(image_width / aspect_ratio);
             image_height = (image_height < 1) ? 1 : image_height;
+
+            sqrt_spp = int(std::sqrt(samples_per_pixel));
+            pixel_samples_scale = 1.0 / (sqrt_spp * sqrt_spp);
+            recip_sqrt_spp = 1.0 / sqrt_spp;
 
             pixel_samples_scale = 1.0 / samples_per_pixel;
 
@@ -61,13 +67,23 @@ class Camera {
         /**
         * Constructs a jittered ray targeting pixel location (i, j)
         */
-        Ray get_ray(int i, int j) const {
-            Vec3 offset = sample_square();
+        Ray get_ray(int i, int j, int s_i, int s_j) const {
+            Vec3 offset = sample_square_stratified(s_i, s_j);
             Point3 pixel_sample = pixel00_loc + ((i + offset.x()) * pixel_delta_u) + ((j + offset.y()) * pixel_delta_v);
             Point3 ray_origin = (defocus_angle <= 0) ? center : defocus_disk_sample();
             Vec3 ray_direction = pixel_sample - ray_origin;
             real ray_time = random_real();
             return Ray(ray_origin, ray_direction, ray_time);
+        }
+
+        /**
+        * Returns the vector to a random point in the square sub-pixel specified by grid indicies s_i s_j
+        */
+        Vec3 sample_square_stratified(int s_i, int s_j) const {
+            real px = ((s_i + random_real()) * recip_sqrt_spp) - 0.5;
+            real py = ((s_j + random_real()) * recip_sqrt_spp) - 0.5;
+
+            return Vec3(px, py, 0);
         }
 
         /**
@@ -138,9 +154,11 @@ class Camera {
 
                 for (int i = 0; i < image_width; i++) {
                     Color pixel_color(0, 0, 0);
-                    for (int sample = 0; sample < samples_per_pixel; sample++) {
-                        Ray r = get_ray(i, j);
-                        pixel_color += ray_color(r, max_ray_bounces, world);
+                    for (int s_j = 0; s_j < sqrt_spp; s_j++) {
+                        for (int s_i = 0; s_i < sqrt_spp; s_i++) {
+                            Ray r = get_ray(i, j, s_i, s_j);
+                            pixel_color += ray_color(r, max_ray_bounces, world);
+                        }
                     }
                     write_color(std::cout, pixel_samples_scale * pixel_color);
                 }
