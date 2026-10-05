@@ -124,7 +124,7 @@ inline Vec3 random_on_hemisphere(const Vec3& normal) {
     if (dot(on_unit_sphere, normal) > 0.0) { // in the same hemisphere in normal
         return on_unit_sphere;
     } else {
-        return -on_unit_sphere;
+        return -1 * on_unit_sphere;
     }
 }
 
@@ -176,6 +176,22 @@ inline int max_component_index(const Vec3& v) {
     } else {
         return (v.y() > v.z()) ? 1 : 2;
     }
+}
+
+/**
+* Generates a random 3D vector on a hemisphere such that the probability density of picking a direction is proportional to the
+* cosine of the angle theta relative to the z-axis.
+*/
+inline Vec3 random_cosine_direction() {
+    real r1 = random_real();
+    real r2 = random_real();
+
+    real phi = 2 * pi * r1;
+    real x = std::cos(phi) * std::sqrt(r2);
+    real y = std::sin(phi) * std::sqrt(r2);
+    real z = std::sqrt(1 - r2);
+
+    return Vec3(x, y, z);
 }
 
 #endif

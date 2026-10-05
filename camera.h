@@ -122,8 +122,10 @@ class Camera {
             // if the ray is absorbed or non-scattering, returns the color from emission
             if (!rec.mat->scatter(r, rec, attenuation, scattered)) return color_from_emission;
 
-            // recursive radiance equation
-            Color color_from_scatter = attenuation * ray_color(scattered, depth - 1, world);
+            real scattering_pdf = rec.mat->scattering_pdf(r, rec, scattered);
+            real pdf_value = scattering_pdf;
+
+            Color color_from_scatter = (attenuation * scattering_pdf * ray_color(scattered, depth - 1, world)) / pdf_value;
             
             return color_from_emission + color_from_scatter;
         }

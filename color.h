@@ -64,6 +64,9 @@ inline Color operator*(real t, const Color& c) {
     return c * t;
 }
 
+inline Color operator/(const Color& c, real t) {
+    return c * (1.0 / t);
+}
 
 /**
 * Converts a linear light component into gamma space. TODO: update description

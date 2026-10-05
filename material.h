@@ -24,6 +24,10 @@ class Material {
         virtual bool scatter(const Ray& r, const HitRecord& rec, Color& attenuation, Ray& scattered) const {
             return false;
         }
+
+        virtual real scattering_pdf(const Ray& r_in, const HitRecord& rec, const Ray& scattered) const {
+            return 0;
+        }
 };
 
 /**
@@ -47,7 +51,7 @@ class Lambertian : public Material {
         * Computes the out ray direction and surface color attenuation.
         */
         bool scatter(const Ray& r_in, const HitRecord& rec, Color& attenuation, Ray& scattered) const override {
-            Vec3 scatter_direction = rec.normal + random_unit_vector();
+            Vec3 scatter_direction = random_on_hemisphere(rec.normal);
 
             if (scatter_direction.near_zero()) {
                 scatter_direction = rec.normal;
@@ -56,6 +60,10 @@ class Lambertian : public Material {
             scattered = Ray(rec.p, scatter_direction, r_in.time());
             attenuation = tex->value(rec.u, rec.v, rec.p);
             return true;
+        }
+
+        real scattering_pdf(const Ray& r_in, const HitRecord& rec, const Ray& scattered) const override {
+            return 1 / (2 * pi);
         }
 };
 

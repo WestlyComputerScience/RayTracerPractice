@@ -245,7 +245,7 @@ void cornell_box() {
 
     cam.aspect_ratio = 1.0;
     cam.image_width = 600;
-    cam.samples_per_pixel = 200;
+    cam.samples_per_pixel = 10;
     cam.max_ray_bounces = 50;
     cam.background = Color(0,0,0);
 
@@ -409,7 +409,7 @@ void test_wavelength(int wavelength, const CIE1931& cie) { Spectrum spectrum; in
 int main() {
     // CIE1931 cie; test_wavelength(450, cie); test_wavelength(550, cie); test_wavelength(650, cie);
 
-    switch (13) {
+    switch (10) {
         case 1: bouncing_spheres(); break;
         case 2: checkered_spheres(); break;
         case 3: moon(); break;
