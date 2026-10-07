@@ -43,7 +43,10 @@ void set_camera(HittableList& world, bool isDefaultLight) {
     cam.defocus_angle = 0;
     // cam.focus_dist = 10.0;
 
-    cam.render(world);
+    shared_ptr<Material> light = shared_ptr<Material>();
+    Quad lights(Point3(343,554,332), Vec3(-130,0,0), Vec3(0,0,-105), light);
+
+    cam.render(world, lights);
 }
 
 void make_ray_tracing_in_one_weekend_cover(HittableList& world) {
@@ -210,7 +213,10 @@ void simple_light() {
     cam.vup      = Vec3(0, 1, 0);
     cam.defocus_angle = 0;
 
-    cam.render(world);
+    shared_ptr<Material> light = shared_ptr<Material>();
+    Quad lights(Point3(343,554,332), Vec3(-130,0,0), Vec3(0,0,-105), light);
+
+    cam.render(world, lights);
 }
 
 void cornell_box() {
@@ -219,17 +225,12 @@ void cornell_box() {
     shared_ptr<Material> red = make_shared<Lambertian>(Color(0.65, 0.05, 0.05));
     shared_ptr<Material> white = make_shared<Lambertian>(Color(0.73, 0.73, 0.73));
     shared_ptr<Material> green = make_shared<Lambertian>(Color(0.12, 0.45, 0.15));
-    shared_ptr<Material> light = make_shared<DiffuseLight>(Color(15, 15, 15));
 
     world.add(make_shared<Quad>(Point3(555,0,0), Vec3(0,555,0), Vec3(0,0,555), green));
     world.add(make_shared<Quad>(Point3(0,0,0), Vec3(0,555,0), Vec3(0,0,555), red));
-    world.add(make_shared<Quad>(Point3(343, 554, 332), Vec3(-130,0,0), Vec3(0,0,-105), light));
     world.add(make_shared<Quad>(Point3(0,0,0), Vec3(555,0,0), Vec3(0,0,555), white));
     world.add(make_shared<Quad>(Point3(555,555,555), Vec3(-555,0,0), Vec3(0,0,-555), white));
     world.add(make_shared<Quad>(Point3(0,0,555), Vec3(555,0,0), Vec3(0,555,0), white));
-
-    world.add(box(Point3(130, 0, 65), Point3(295, 165, 230), white));
-    world.add(box(Point3(265, 0, 295), Point3(430, 330, 460), white));
 
     shared_ptr<Hittable> box1 = box(Point3(0, 0, 0), Point3(165, 330, 165), white);
     box1 = make_shared<RotateY>(box1, 15);
@@ -240,6 +241,9 @@ void cornell_box() {
     box2 = make_shared<RotateY>(box2, -18);
     box2 = make_shared<Translate>(box2, Vec3(130, 0, 65));
     world.add(box2);
+
+    shared_ptr<Material> light = shared_ptr<Material>();
+    Quad lights(Point3(343,554,332), Vec3(-130,0,0), Vec3(0,0,-105), light);
 
     Camera cam;
 
@@ -256,7 +260,7 @@ void cornell_box() {
 
     cam.defocus_angle = 0;
 
-    cam.render(world);
+    cam.render(world, lights);
 }
 
 void cornell_smoke() {
@@ -300,7 +304,10 @@ void cornell_smoke() {
 
     cam.defocus_angle = 0;
 
-    cam.render(world);
+    shared_ptr<Material> light1 = shared_ptr<Material>();
+    Quad lights(Point3(343,554,332), Vec3(-130,0,0), Vec3(0,0,-105), light1);
+
+    cam.render(world, lights);
 }
 
 void final_chapt2_scene(int image_width, int samples_per_pixel, int max_depth) {
@@ -372,7 +379,10 @@ void final_chapt2_scene(int image_width, int samples_per_pixel, int max_depth) {
 
     cam.defocus_angle = 0;
 
-    cam.render(world);
+    shared_ptr<Material> light1 = shared_ptr<Material>();
+    Quad lights(Point3(343,554,332), Vec3(-130,0,0), Vec3(0,0,-105), light1);
+
+    cam.render(world, lights);
 }
 
 void render_blender_triangle_mesh() {
@@ -400,7 +410,10 @@ void render_blender_triangle_mesh() {
 
     cam.defocus_angle = 0;
 
-    cam.render(world);
+    shared_ptr<Material> light = shared_ptr<Material>();
+    Quad lights(Point3(343,554,332), Vec3(-130,0,0), Vec3(0,0,-105), light);
+
+    cam.render(world, lights);
 }
 
 /*
@@ -425,3 +438,5 @@ int main() {
         case 13: render_blender_triangle_mesh(); break;
     }
 }
+
+// TODO: add pdfs for triangles, spheres?, etc.

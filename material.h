@@ -2,6 +2,7 @@
 #define MATERIAL_H
 
 #include "hittable.h"
+#include "onb.h"
 #include "texture.h"
 
 /**
@@ -14,14 +15,14 @@ class Material {
         /**
         * Calculates the light emmitted directly by the material at a specific point, black by default.
         */
-        virtual Color emitted(real u, real v, const Point3& p) const {
+        virtual Color emitted(const Ray& r_in, const HitRecord& rec, real u, real v, const Point3& p) const {
             return Color(0, 0, 0);
         }
 
         /**
         * Determines how an incoming ray bounces, no bounce by default.
         */
-        virtual bool scatter(const Ray& r, const HitRecord& rec, Color& attenuation, Ray& scattered) const {
+        virtual bool scatter(const Ray& r, const HitRecord& rec, Color& attenuation, Ray& scattered, real& pdf) const {
             return false;
         }
 
@@ -50,15 +51,13 @@ class Lambertian : public Material {
         /**
         * Computes the out ray direction and surface color attenuation.
         */
-        bool scatter(const Ray& r_in, const HitRecord& rec, Color& attenuation, Ray& scattered) const override {
-            Vec3 scatter_direction = random_on_hemisphere(rec.normal);
+        bool scatter(const Ray& r_in, const HitRecord& rec, Color& attenuation, Ray& scattered, real& pdf) const override {
+            Onb uvw(rec.normal);
+            Vec3 scatter_direction = uvw.transform(random_cosine_direction());
 
-            if (scatter_direction.near_zero()) {
-                scatter_direction = rec.normal;
-            }
-
-            scattered = Ray(rec.p, scatter_direction, r_in.time());
+            scattered = Ray(rec.p, unit_vector(scatter_direction), r_in.time());
             attenuation = tex->value(rec.u, rec.v, rec.p);
+            pdf = dot(uvw.w(), scattered.direction()) / pi;
             return true;
         }
 
@@ -83,7 +82,7 @@ class Metal : public Material {
         /**
         * Calculates specular reflection and applies roughness offset to produce outbound rays.
         */
-        bool scatter(const Ray& r_in, const HitRecord& rec, Color& attenuation, Ray& scattered) const override {
+        bool scatter(const Ray& r_in, const HitRecord& rec, Color& attenuation, Ray& scattered, real& pdf) const override {
             Vec3 reflected = reflect(r_in.direction(), rec.normal);
             reflected = unit_vector(reflected) + (fuzz * random_unit_vector());
             scattered = Ray(rec.p, reflected, r_in.time());
@@ -117,7 +116,7 @@ class Dielectric : public Material {
         /**
         * Determines if the incoming ray refracts into/out of the dielectric or if it reflects off the surface boundary.
         */
-        bool scatter(const Ray& r_in, const HitRecord& rec, Color& attenuation, Ray& scattered) const override {
+        bool scatter(const Ray& r_in, const HitRecord& rec, Color& attenuation, Ray& scattered, real& pdf) const override {
             attenuation = Color(1.0, 1.0, 1.0);
             real ri = rec.front_face ? (1.0 / refraction_index) : refraction_index;
 
@@ -158,7 +157,8 @@ class DiffuseLight : public Material {
         /**
         * Calculates the light spectrum and intensity at a given point.
         */
-        Color emitted(real u, real v, const Point3& p) const override {
+        Color emitted(const Ray& r_in, const HitRecord& rec, real u, real v, const Point3& p) const override {
+            if (!rec.front_face) return Color(0, 0, 0);
             return tex->value(u, v, p);
         }
 };
@@ -183,11 +183,14 @@ class Isotropic : public Material {
         /**
         * Computes a random outbound ray direction and sets the color attenuation.
         */
-        bool scatter(const Ray& r_in, const HitRecord& rec, Color& attenuation, Ray& scattered) const override {
+        bool scatter(const Ray& r_in, const HitRecord& rec, Color& attenuation, Ray& scattered, real& pdf) const override {
             scattered = Ray(rec.p, random_unit_vector(), r_in.time());
             attenuation = tex->value(rec.u, rec.v, rec.p);
+            pdf = 1 / (4 * pi);
             return true;
         }
+
+        real scattering_pdf(const Ray& r_in, const HitRecord& rec, const Ray& scattered) const override { return 1 / (4 * pi); }
 };
 
 #endif

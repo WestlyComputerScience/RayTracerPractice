@@ -2,6 +2,7 @@
 #define CAMERA_H
 
 #include "hittable.h"
+#include "pdf.h"
 #include "material.h"
 
 /**
@@ -105,7 +106,7 @@ class Camera {
         /**
         * Evaluates incoming radiance for a ray through recursive path tracing.
         */
-        Color ray_color(const Ray& r, int depth, const Hittable& world) const {
+        Color ray_color(const Ray& r, int depth, const Hittable& world, const Hittable& lights) const {
             if (depth <= 0) return Color (0, 0, 0); // returns black if exceeds depth
 
             // returns black if no intersection
@@ -117,15 +118,20 @@ class Camera {
             // Samples light emissions from emissive materials
             Ray scattered;
             Color attenuation;
-            Color color_from_emission = rec.mat->emitted(rec.u, rec.v, rec.p);
+            real pdf_value;
+            Color color_from_emission = rec.mat->emitted(r, rec, rec.u, rec.v, rec.p);
 
             // if the ray is absorbed or non-scattering, returns the color from emission
-            if (!rec.mat->scatter(r, rec, attenuation, scattered)) return color_from_emission;
+            if (!rec.mat->scatter(r, rec, attenuation, scattered, pdf_value)) return color_from_emission;
+
+            HittablePdf light_pdf(lights, rec.p);
+            scattered = Ray(rec.p, light_pdf.generate(), r.time());
+            pdf_value = light_pdf.value(scattered.direction());
 
             real scattering_pdf = rec.mat->scattering_pdf(r, rec, scattered);
-            real pdf_value = scattering_pdf;
 
-            Color color_from_scatter = (attenuation * scattering_pdf * ray_color(scattered, depth - 1, world)) / pdf_value;
+            Color sample_color = ray_color(scattered, depth - 1, world, lights);
+            Color color_from_scatter = (attenuation * scattering_pdf * sample_color) / pdf_value;
             
             return color_from_emission + color_from_scatter;
         }
@@ -146,7 +152,7 @@ class Camera {
         /**
         * Main entry point executing scene rendering and PPM output.
         */
-        void render(const Hittable& world) {
+        void render(const Hittable& world, const Hittable& lights) {
             initialize();
 
             std::cout << "P3\n" << image_width << ' ' << image_height << "\n255\n";
@@ -159,7 +165,7 @@ class Camera {
                     for (int s_j = 0; s_j < sqrt_spp; s_j++) {
                         for (int s_i = 0; s_i < sqrt_spp; s_i++) {
                             Ray r = get_ray(i, j, s_i, s_j);
-                            pixel_color += ray_color(r, max_ray_bounces, world);
+                            pixel_color += ray_color(r, max_ray_bounces, world, lights);
                         }
                     }
                     write_color(std::cout, pixel_samples_scale * pixel_color);

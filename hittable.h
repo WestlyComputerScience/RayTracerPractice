@@ -45,6 +45,10 @@ class Hittable {
         * Returns an Axis-Aligned Bounding Box enclosing the object, used for Bvhs.
         */
         virtual Aabb bounding_box() const = 0;
+
+        virtual real pdf_value(const Point3& origin, const Vec3& direction) const { return 0.0; }
+
+        virtual Vec3 random(const Point3& origin) const { return Vec3(1, 0, 0); }
 };
 
 /**

@@ -17,6 +17,7 @@ class Quad : public Hittable {
         Aabb bbox;
         Vec3 normal;
         real D;
+        real area;
     public:
         /**
         * Computes the unit nromal vector, plane constant D, helper w, and sets the bounding box.
@@ -26,6 +27,8 @@ class Quad : public Hittable {
             normal = unit_vector(n);
             D = dot(normal, Q);
             w = n / dot(n, n);
+
+            area = n.length();
 
             set_bounding_box();
         }
@@ -83,6 +86,21 @@ class Quad : public Hittable {
             rec.u = a;
             rec.v = b;
             return true;
+        }
+
+        real pdf_value(const Point3& origin, const Vec3& direction) const override {
+            HitRecord rec;
+            if (!this->hit(Ray(origin, direction), Interval(0.001, infinity), rec)) return 0;
+
+            real distance_squared = rec.t * rec.t * direction.length_squared();
+            real cosine = std::fabs(dot(direction, rec.normal) / direction.length());
+
+            return distance_squared / (cosine * area);
+        }
+        
+        Vec3 random(const Point3& origin) const override {
+            Point3 p = Q + (random_real() * u) + (random_real() * v);
+            return p - origin;
         }
 };
 
