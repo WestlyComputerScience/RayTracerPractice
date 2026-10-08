@@ -225,9 +225,11 @@ void cornell_box() {
     shared_ptr<Material> red = make_shared<Lambertian>(Color(0.65, 0.05, 0.05));
     shared_ptr<Material> white = make_shared<Lambertian>(Color(0.73, 0.73, 0.73));
     shared_ptr<Material> green = make_shared<Lambertian>(Color(0.12, 0.45, 0.15));
+    shared_ptr<Material> light = make_shared<DiffuseLight>(Color(15, 15, 15));
 
     world.add(make_shared<Quad>(Point3(555,0,0), Vec3(0,555,0), Vec3(0,0,555), green));
     world.add(make_shared<Quad>(Point3(0,0,0), Vec3(0,555,0), Vec3(0,0,555), red));
+    world.add(make_shared<Quad>(Point3(343, 554, 332), Vec3(-130,0,0), Vec3(0,0,-105), light));
     world.add(make_shared<Quad>(Point3(0,0,0), Vec3(555,0,0), Vec3(0,0,555), white));
     world.add(make_shared<Quad>(Point3(555,555,555), Vec3(-555,0,0), Vec3(0,0,-555), white));
     world.add(make_shared<Quad>(Point3(0,0,555), Vec3(555,0,0), Vec3(0,555,0), white));
@@ -242,8 +244,8 @@ void cornell_box() {
     box2 = make_shared<Translate>(box2, Vec3(130, 0, 65));
     world.add(box2);
 
-    shared_ptr<Material> light = shared_ptr<Material>();
-    Quad lights(Point3(343,554,332), Vec3(-130,0,0), Vec3(0,0,-105), light);
+    shared_ptr<Material> light1 = shared_ptr<Material>();
+    Quad lights(Point3(343,554,332), Vec3(-130,0,0), Vec3(0,0,-105), light1);
 
     Camera cam;
 

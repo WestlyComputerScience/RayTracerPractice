@@ -124,9 +124,12 @@ class Camera {
             // if the ray is absorbed or non-scattering, returns the color from emission
             if (!rec.mat->scatter(r, rec, attenuation, scattered, pdf_value)) return color_from_emission;
 
-            HittablePdf light_pdf(lights, rec.p);
-            scattered = Ray(rec.p, light_pdf.generate(), r.time());
-            pdf_value = light_pdf.value(scattered.direction());
+            shared_ptr<HittablePdf> p0 = make_shared<HittablePdf>(lights, rec.p);
+            shared_ptr<CosinePdf> p1 = make_shared<CosinePdf>(rec.normal);
+            MixturePdf mixed_pdf(p0, p1);
+
+            scattered = Ray(rec.p, mixed_pdf.generate(), r.time());
+            pdf_value = mixed_pdf.value(scattered.direction());
 
             real scattering_pdf = rec.mat->scattering_pdf(r, rec, scattered);
 
