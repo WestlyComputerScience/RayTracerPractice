@@ -92,6 +92,11 @@ inline void write_color(std::ostream& out, const Color& pixel_color) {
     // g = g / (g + 1.0);
     // b = b / (b + 1.0);
 
+    // safeguard from NaNs
+    if (r != r) r = 0.0;
+    if (g != g) g = 0.0;
+    if (b != b) b = 0.0;
+
     r = linear_to_gamma(r);
     g = linear_to_gamma(g);
     b = linear_to_gamma(b);

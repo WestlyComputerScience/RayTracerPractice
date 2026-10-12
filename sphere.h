@@ -13,6 +13,19 @@ class Sphere : public Hittable {
         real radius;
         shared_ptr<Material> mat;
         Aabb bbox; // Bounding Box
+
+        static Vec3 random_to_sphere(real radius, real distance_squared) {
+            real r1 = random_real();
+            real r2 = random_real();
+            real z = 1 + r2 * (std::sqrt(1 - radius * radius / distance_squared) - 1);
+
+            real phi = 2 * pi * r1;
+            real x = std::cos(phi) * std::sqrt(1 - z * z);
+            real y = std::sin(phi) * std::sqrt(1 - z * z);
+
+            return Vec3(x, y, z);
+        }
+
     public:
         /**
         * Builds a stationary sphere.
@@ -83,6 +96,26 @@ class Sphere : public Hittable {
 
             u = phi / (2 * pi);
             v = theta / pi;
+        }
+
+        real pdf_value(const Point3& origin, const Vec3& direction) const override {
+            // TODO: this only works for stationary spheres
+
+            HitRecord rec;
+            if (!this->hit(Ray(origin, direction), Interval(0.001, infinity), rec)) return 0;
+
+            real dist_squared = (center.at(0) - origin).length_squared();
+            real cos_theta_max = std::sqrt(1 - radius * radius / dist_squared);
+            real solid_angle = 2 * pi * (1 - cos_theta_max);
+
+            return 1 / solid_angle;
+        }
+
+        Vec3 random(const Point3& origin) const override {
+            Vec3 direction = center.at(0) - origin;
+            real distance_squared = direction.length_squared();
+            Onb uvw(direction);
+            return uvw.transform(random_to_sphere(radius, distance_squared));
         }
 };
 

@@ -51,6 +51,22 @@ class HittableList : public Hittable {
         }
 
         Aabb bounding_box() const override { return bbox; }
+
+        real pdf_value(const Point3& origin, const Vec3& direction) const override {
+            real weight = 1.0 / objects.size();
+            real sum = 0.0;
+
+            for (const auto& object : objects) {
+                sum += weight * object->pdf_value(origin, direction);
+            }
+
+            return sum;
+        }
+
+        Vec3 random(const Point3& origin) const override {
+            real int_size = int(objects.size());
+            return objects[random_int(0, int_size - 1)]->random(origin);
+        }
 };
 
 #endif

@@ -116,25 +116,27 @@ class Camera {
             }
 
             // Samples light emissions from emissive materials
-            Ray scattered;
-            Color attenuation;
-            real pdf_value;
+            ScatterRecord srec;
             Color color_from_emission = rec.mat->emitted(r, rec, rec.u, rec.v, rec.p);
 
             // if the ray is absorbed or non-scattering, returns the color from emission
-            if (!rec.mat->scatter(r, rec, attenuation, scattered, pdf_value)) return color_from_emission;
+            if (!rec.mat->scatter(r, rec, srec)) return color_from_emission;
 
-            shared_ptr<HittablePdf> p0 = make_shared<HittablePdf>(lights, rec.p);
-            shared_ptr<CosinePdf> p1 = make_shared<CosinePdf>(rec.normal);
-            MixturePdf mixed_pdf(p0, p1);
+            // skip PDFs for specular-like materials
+            if (srec.skip_pdf) {
+                return srec.attenuation * ray_color(srec.skip_pdf_ray, depth - 1, world, lights);
+            }
 
-            scattered = Ray(rec.p, mixed_pdf.generate(), r.time());
-            pdf_value = mixed_pdf.value(scattered.direction());
+            shared_ptr<Pdf> light_ptr = make_shared<HittablePdf>(lights, rec.p);
+            MixturePdf p(light_ptr, srec.pdf_ptr);
+
+            Ray scattered = Ray(rec.p, p.generate(), r.time());
+            real pdf_value = p.value(scattered.direction());
 
             real scattering_pdf = rec.mat->scattering_pdf(r, rec, scattered);
 
             Color sample_color = ray_color(scattered, depth - 1, world, lights);
-            Color color_from_scatter = (attenuation * scattering_pdf * sample_color) / pdf_value;
+            Color color_from_scatter = (srec.attenuation * scattering_pdf * sample_color) / pdf_value;
             
             return color_from_emission + color_from_scatter;
         }

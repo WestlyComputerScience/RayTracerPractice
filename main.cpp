@@ -234,24 +234,30 @@ void cornell_box() {
     world.add(make_shared<Quad>(Point3(555,555,555), Vec3(-555,0,0), Vec3(0,0,-555), white));
     world.add(make_shared<Quad>(Point3(0,0,555), Vec3(555,0,0), Vec3(0,555,0), white));
 
-    shared_ptr<Hittable> box1 = box(Point3(0, 0, 0), Point3(165, 330, 165), white);
+    shared_ptr<Material> aluminum = make_shared<Metal>(Color(0.8, 0.85, 0.88), 0.0);
+    shared_ptr<Hittable> box1 = box(Point3(0,0,0), Point3(165,330,165), aluminum);
     box1 = make_shared<RotateY>(box1, 15);
     box1 = make_shared<Translate>(box1, Vec3(265, 0, 295));
     world.add(box1);
 
-    shared_ptr<Hittable> box2 = box(Point3(0, 0, 0), Point3(165, 165, 165), white);
-    box2 = make_shared<RotateY>(box2, -18);
-    box2 = make_shared<Translate>(box2, Vec3(130, 0, 65));
-    world.add(box2);
+    shared_ptr<Material> glass = make_shared<Dielectric>(1.5);
+    world.add(make_shared<Sphere>(Point3(190, 90, 190), 90, glass));
 
-    shared_ptr<Material> light1 = shared_ptr<Material>();
-    Quad lights(Point3(343,554,332), Vec3(-130,0,0), Vec3(0,0,-105), light1);
+    // shared_ptr<Hittable> box2 = box(Point3(0, 0, 0), Point3(165, 165, 165), white);
+    // box2 = make_shared<RotateY>(box2, -18);
+    // box2 = make_shared<Translate>(box2, Vec3(130, 0, 65));
+    // world.add(box2);
+
+    shared_ptr<Material> empty_material = shared_ptr<Material>();
+    HittableList lights;
+    lights.add(make_shared<Quad>(Point3(343, 554, 332), Vec3(-130, 0, 0), Vec3(0, 0, -105), empty_material));
+    lights.add(make_shared<Sphere>(Point3(190, 90, 190), 90, empty_material));
 
     Camera cam;
 
     cam.aspect_ratio = 1.0;
     cam.image_width = 600;
-    cam.samples_per_pixel = 10;
+    cam.samples_per_pixel = 1000;
     cam.max_ray_bounces = 50;
     cam.background = Color(0,0,0);
 
@@ -418,13 +424,120 @@ void render_blender_triangle_mesh() {
     cam.render(world, lights);
 }
 
+void my_midterm_scene() {
+    HittableList world;
+
+    // === MATERIALS ===
+    shared_ptr<Material> grey = make_shared<Lambertian>(Color(0.55, 0.55, 0.55));
+    shared_ptr<Material> white = make_shared<Lambertian>(Color(0.73, 0.73, 0.73));
+    shared_ptr<Material> red = make_shared<Lambertian>(Color(0.65, 0.05, 0.05));
+    shared_ptr<Material> green = make_shared<Lambertian>(Color(0.12, 0.45, 0.15));
+    shared_ptr<Material> light = make_shared<DiffuseLight>(Color(15, 15, 15));
+    shared_ptr<Material> no_material;
+    shared_ptr<Material> silver = make_shared<Metal>(Color(0.74, 0.78, 0.80), 0.2);
+    shared_ptr<Material> glass = make_shared<Dielectric>(1.5);
+    shared_ptr<Material> pyramid_material = make_shared<Lambertian>(Color(0.15, 0.6, 0.8));
+
+    // === CORNELL BOX ===
+    world.add(make_shared<Quad>(Point3(555,0,0), Vec3(0,555,0), Vec3(0,0,555), green));
+    world.add(make_shared<Quad>(Point3(0,0,0), Vec3(0,555,0), Vec3(0,0,555), red));
+    world.add(make_shared<Quad>(Point3(0,0,0), Vec3(555,0,0), Vec3(0,0,555), grey));
+    world.add(make_shared<Quad>(Point3(555,555,555), Vec3(-555,0,0), Vec3(0,0,-555), grey));
+    world.add(make_shared<Quad>(Point3(0,0,555), Vec3(555,0,0), Vec3(0,555,0), grey));
+
+    const Point3 light_origin(343, 554, 332);
+    const Vec3 light_u(-130, 0, 0);
+    const Vec3 light_v(0, 0, -105);
+    world.add(make_shared<Quad>(light_origin, light_u, light_v, light));
+    Quad lights(light_origin, light_u, light_v, no_material);
+
+    // === JPG TEXTURES ===
+    shared_ptr<Texture> poopTex = make_shared<ImageTexture>("images/poop_emoji.jpg");
+    world.add(make_shared<Quad>(Point3(238, 400, 550), Vec3(80, 0, 0), Vec3(0, 80, 0), make_shared<Lambertian>(poopTex)));
+
+    shared_ptr<Texture> moon_texture = make_shared<ImageTexture>("images/moon.jpg");
+    shared_ptr<Material> moon_surface = make_shared<Lambertian>(moon_texture);
+    shared_ptr<Hittable> moon = make_shared<Sphere>(Point3(80, 400, 400), 42, moon_surface);
+    world.add(moon);
+
+    // === PERLIN NOISE ===
+    shared_ptr<Texture> pertext = make_shared<NoiseTexture>(4);
+    world.add(make_shared<Sphere>(Point3(400, 400, 440), 42, make_shared<Lambertian>(pertext)));
+
+    // === GLASS AND METAL ===
+    world.add(make_shared<Sphere>(Point3(385, 45, 190), 40, glass));
+    world.add(make_shared<Sphere>(Point3(475, 45, 300), 40, silver));
+
+    // === ROTATE SMOKE BOXES ===
+    shared_ptr<Hittable> smoke_box1 = box(Point3(0, 0, 0), Point3(95, 140, 95), white);
+    smoke_box1 = make_shared<RotateY>(smoke_box1, 15);
+    smoke_box1 = make_shared<Translate>(smoke_box1, Vec3(75, 0, 365));
+
+    shared_ptr<Hittable> smoke_box2 = box(Point3(0, 0, 0), Point3(90, 90, 90), white);
+    smoke_box2 = make_shared<RotateY>(smoke_box2, -18);
+    smoke_box2 = make_shared<Translate>(smoke_box2, Vec3(285, 0, 390));
+
+    world.add(make_shared<ConstantMedium>(smoke_box1, 0.02, Color(0.2, 0.8, 0.5)));
+    world.add(make_shared<ConstantMedium>(smoke_box2, 0.02, Color(1.0, 0.5, 0.2)));
+
+    // === TRIANGLE PYRAMID ===
+    Point3 apex(460, 345, 410);
+    Point3 p1(415, 200, 365);
+    Point3 p2(505, 200, 365);
+    Point3 p3(505, 200, 455);
+    Point3 p4(415, 200, 455);
+
+    world.add(make_shared<Triangle>(apex, p1, p2, pyramid_material));
+    world.add(make_shared<Triangle>(apex, p2, p3, pyramid_material));
+    world.add(make_shared<Triangle>(apex, p3, p4, pyramid_material));
+    world.add(make_shared<Triangle>(apex, p4, p1, pyramid_material));
+
+    // === BUNCH OF METAL SPHERES ===
+    HittableList sphere_cluster;
+
+    auto cluster_material = make_shared<Metal>(Color(0.65, 0.68, 0.72), 0.12);
+
+    for (int i = 0; i < 1000; i++) {
+        sphere_cluster.add(make_shared<Sphere>(Point3::random(0, 1) * Vec3(100, 100, 100) + Vec3(300, 200, 400), 3, cluster_material));
+    }
+    world.add(make_shared<BvhNode>(sphere_cluster));
+
+    // === MY W DUDE ===
+    HittableList dude_mesh;
+
+    if (load_object_mesh("models/Dude2.obj", dude_mesh, grey)) {
+        shared_ptr<Hittable> dude = make_shared<HittableList>(dude_mesh);
+        dude = make_shared<RotateY>(dude, 90);
+        dude = make_shared<Translate>(dude, Vec3(160, 150, 300));
+        auto dude_bvh = make_shared<BvhNode>(dude);
+        world.add(dude_bvh);
+    }
+
+    Camera cam;
+
+    cam.aspect_ratio = 1.0;
+    cam.image_width = 600;
+    cam.samples_per_pixel = 200;
+    cam.max_ray_bounces = 50;
+    cam.background = Color(0, 0, 0);
+
+    cam.vfov = 40;
+    cam.lookfrom = Point3(278, 278, -800);
+    cam.lookat = Point3(278, 278, 0);
+    cam.vup = Vec3(0, 1, 0);
+
+    cam.defocus_angle = 0;
+
+    cam.render(world, lights);
+}
+
 /*
 void test_wavelength(int wavelength, const CIE1931& cie) { Spectrum spectrum; int index = wavelength - 360; spectrum[index] = 1.0; XYZ xyz = spectrum.toXYZ(cie); Color color = xyz.toColor(); std::cout << "============================\n"; std::cout << wavelength << " nm\n"; std::cout << "============================\n"; std::cout << "XYZ:\n"; std::cout << "X = " << xyz.x << '\n'; std::cout << "Y = " << xyz.y << '\n'; std::cout << "Z = " << xyz.z << '\n'; std::cout << "\nLinear RGB:\n"; std::cout << "R = " << color.r() << '\n'; std::cout << "G = " << color.g() << '\n'; std::cout << "B = " << color.b() << '\n'; std::cout << '\n'; }
 */
 int main() {
     // CIE1931 cie; test_wavelength(450, cie); test_wavelength(550, cie); test_wavelength(650, cie);
 
-    switch (10) {
+    switch (14) {
         case 1: bouncing_spheres(); break;
         case 2: checkered_spheres(); break;
         case 3: moon(); break;
@@ -438,6 +551,7 @@ int main() {
         case 11: cornell_smoke(); break;
         case 12: final_chapt2_scene(800, 10000, 40); break;
         case 13: render_blender_triangle_mesh(); break;
+        case 14: my_midterm_scene(); break;
     }
 }
 
