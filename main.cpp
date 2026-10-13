@@ -531,13 +531,34 @@ void my_midterm_scene() {
     cam.render(world, lights);
 }
 
+void cube_mapping() {
+    HittableList world;
+    HittableList lights;
+    
+    Camera cam;
+
+    cam.aspect_ratio = 1.0;
+    cam.image_width = 600;
+    cam.samples_per_pixel = 50;
+    cam.max_ray_bounces = 50;
+
+    cam.vfov = 40;
+    cam.lookfrom = Point3(278, 278, -800);
+    cam.lookat = Point3(278, 278, 0);
+    cam.vup = Vec3(0, 1, 0);
+
+    cam.defocus_angle = 0;
+
+    cam.render(world, lights);
+}
+
 /*
 void test_wavelength(int wavelength, const CIE1931& cie) { Spectrum spectrum; int index = wavelength - 360; spectrum[index] = 1.0; XYZ xyz = spectrum.toXYZ(cie); Color color = xyz.toColor(); std::cout << "============================\n"; std::cout << wavelength << " nm\n"; std::cout << "============================\n"; std::cout << "XYZ:\n"; std::cout << "X = " << xyz.x << '\n'; std::cout << "Y = " << xyz.y << '\n'; std::cout << "Z = " << xyz.z << '\n'; std::cout << "\nLinear RGB:\n"; std::cout << "R = " << color.r() << '\n'; std::cout << "G = " << color.g() << '\n'; std::cout << "B = " << color.b() << '\n'; std::cout << '\n'; }
 */
 int main() {
     // CIE1931 cie; test_wavelength(450, cie); test_wavelength(550, cie); test_wavelength(650, cie);
 
-    switch (14) {
+    switch (15) {
         case 1: bouncing_spheres(); break;
         case 2: checkered_spheres(); break;
         case 3: moon(); break;
@@ -552,6 +573,7 @@ int main() {
         case 12: final_chapt2_scene(800, 10000, 40); break;
         case 13: render_blender_triangle_mesh(); break;
         case 14: my_midterm_scene(); break;
+        case 15: cube_mapping(); break;
     }
 }
 

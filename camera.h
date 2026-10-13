@@ -4,6 +4,8 @@
 #include "hittable.h"
 #include "pdf.h"
 #include "material.h"
+#include "cube_map.h"
+#include "rtw_stb_image.h"
 
 /**
 * Manages image generation and streams PPM image data directly to standard output.
@@ -21,6 +23,15 @@ class Camera {
         Vec3 u, v, w; // vectors pointing backward, directly, and directly up relative to camera's orientation
         Vec3 defocus_disk_u; // horizontal/verticle radius vector scaling unit circles samples to match a physical len's aperture
         Vec3 defocus_disk_v;
+        // cube mapping
+        CubeMap skybox(
+            "images/cubeMapping/coolHouse/right.jpg",  // +X
+            "images/cubeMapping/coolHouse/left.jpg",   // -X
+            "images/cubeMapping/coolHouse/top.jpg",    // +Y
+            "images/cubeMapping/coolHouse/bottom.jpg", // -Y
+            "images/cubeMapping/coolHouse/front.jpg",  // +Z
+            "images/cubeMapping/coolHouse/back.jpg"    // -Z
+        );
 
         /**
         * Computes frame params before rendering.
@@ -31,7 +42,6 @@ class Camera {
             image_height = (image_height < 1) ? 1 : image_height;
 
             sqrt_spp = int(std::sqrt(samples_per_pixel));
-            pixel_samples_scale = 1.0 / (sqrt_spp * sqrt_spp);
             recip_sqrt_spp = 1.0 / sqrt_spp;
 
             pixel_samples_scale = 1.0 / samples_per_pixel;
@@ -112,7 +122,8 @@ class Camera {
             // returns black if no intersection
             HitRecord rec;
             if (!world.hit(r, Interval(0.001, infinity), rec)) { // 0.001 solves shadow acne problem
-                return background;
+                Vec3 unit_dir = unit_vector(r.direction());
+                return skybox.sample(unit_dir);
             }
 
             // Samples light emissions from emissive materials
