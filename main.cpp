@@ -574,7 +574,7 @@ void test_wavelength(int wavelength, const CIE1931& cie) { Spectrum spectrum; in
 int main() {
     // CIE1931 cie; test_wavelength(450, cie); test_wavelength(550, cie); test_wavelength(650, cie);
 
-    switch (15) {
+    switch (14) {
         case 1: bouncing_spheres(); break;
         case 2: checkered_spheres(); break;
         case 3: moon(); break;

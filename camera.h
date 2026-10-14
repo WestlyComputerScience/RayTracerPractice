@@ -1,6 +1,7 @@
 #ifndef CAMERA_H
 #define CAMERA_H
 
+#include <omp.h>
 #include "hittable.h"
 #include "pdf.h"
 #include "material.h"
@@ -172,11 +173,22 @@ class Camera {
         void render(const Hittable& world, const Hittable& lights) {
             initialize();
 
+            omp_set_num_threads(12); // set the thread limit to 12
+
             std::cout << "P3\n" << image_width << ' ' << image_height << "\n255\n";
 
-            for (int j = 0; j < image_height; j++) {
-                std::clog << "\rScanlines remaining: " << (image_height - j) << ' ' << std::flush;
+            std::vector<std::vector<Color>> framebuffer(image_height, std::vector<Color>(image_width)); // store rows before printing them
 
+            // Tells OpenMP to distribute scanlines across all available CPU cores
+            #pragma omp parallel for schedule(dynamic, 1)
+            for (int j = 0; j < image_height; j++) {
+                // protects the progress log so threads don't scramble text
+                #pragma omp critical
+                {
+                    std::clog << "\rScanlines remaining: " << (image_height - j) << ' ' << std::flush;
+                }
+
+                std::vector<Color> scanline_colors(image_width);
                 for (int i = 0; i < image_width; i++) {
                     Color pixel_color(0, 0, 0);
                     for (int s_j = 0; s_j < sqrt_spp; s_j++) {
@@ -185,9 +197,17 @@ class Camera {
                             pixel_color += ray_color(r, max_ray_bounces, world, lights);
                         }
                     }
-                    write_color(std::cout, pixel_samples_scale * pixel_color);
+                    framebuffer[j][i] = pixel_samples_scale * pixel_color;
                 }
             }
+
+            // Write the buffered pixels sequentially to standard output
+            for (int j = 0; j < image_height; j++) {
+                for (int i = 0; i < image_width; i++) {
+                    write_color(std::cout, framebuffer[j][i]);
+                }
+            }
+
             std::clog << "\rDone.                 \n";
         }
 };
