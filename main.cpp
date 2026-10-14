@@ -535,6 +535,22 @@ void cube_mapping() {
     HittableList world;
     HittableList lights;
     
+    // triangle pyramid
+    shared_ptr<Material> pyramid_material = make_shared<Lambertian>(Color(0.15, 0.6, 0.8));
+    Point3 apex(460, 345, 410);
+    Point3 p1(415, 200, 365);
+    Point3 p2(505, 200, 365);
+    Point3 p3(505, 200, 455);
+    Point3 p4(415, 200, 455);
+    world.add(make_shared<Triangle>(apex, p1, p2, pyramid_material));
+    world.add(make_shared<Triangle>(apex, p2, p3, pyramid_material));
+    world.add(make_shared<Triangle>(apex, p3, p4, pyramid_material));
+    world.add(make_shared<Triangle>(apex, p4, p1, pyramid_material));
+
+    shared_ptr<Material> light_material = make_shared<DiffuseLight>(Color(15, 15, 15));
+    world.add(make_shared<Quad>(Point3(343, 554, 332), Vec3(-130, 0, 0), Vec3(0, 0, -105), light_material));
+    lights.add(make_shared<Quad>(Point3(343, 554, 332), Vec3(-130, 0, 0), Vec3(0, 0, -105), light_material));
+
     Camera cam;
 
     cam.aspect_ratio = 1.0;
@@ -542,8 +558,8 @@ void cube_mapping() {
     cam.samples_per_pixel = 50;
     cam.max_ray_bounces = 50;
 
-    cam.vfov = 40;
-    cam.lookfrom = Point3(278, 278, -800);
+    cam.vfov = 90;
+    cam.lookfrom = Point3(278, 278, -10000);
     cam.lookat = Point3(278, 278, 0);
     cam.vup = Vec3(0, 1, 0);
 

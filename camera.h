@@ -23,15 +23,7 @@ class Camera {
         Vec3 u, v, w; // vectors pointing backward, directly, and directly up relative to camera's orientation
         Vec3 defocus_disk_u; // horizontal/verticle radius vector scaling unit circles samples to match a physical len's aperture
         Vec3 defocus_disk_v;
-        // cube mapping
-        CubeMap skybox(
-            "images/cubeMapping/coolHouse/right.jpg",  // +X
-            "images/cubeMapping/coolHouse/left.jpg",   // -X
-            "images/cubeMapping/coolHouse/top.jpg",    // +Y
-            "images/cubeMapping/coolHouse/bottom.jpg", // -Y
-            "images/cubeMapping/coolHouse/front.jpg",  // +Z
-            "images/cubeMapping/coolHouse/back.jpg"    // -Z
-        );
+        CubeMap skybox; // cube mapping
 
         /**
         * Computes frame params before rendering.
@@ -73,6 +65,15 @@ class Camera {
             real defocus_radius = focus_dist * std::tan(degrees_to_radians(defocus_angle / 2));
             defocus_disk_u = u * defocus_radius;
             defocus_disk_v = v * defocus_radius;
+
+            skybox = CubeMap(
+                "images/cubeMapping/coolHouse/right.hdr",  // +X
+                "images/cubeMapping/coolHouse/left.hdr",   // -X
+                "images/cubeMapping/coolHouse/up.hdr",    // +Y
+                "images/cubeMapping/coolHouse/down.hdr", // -Y
+                "images/cubeMapping/coolHouse/front.hdr",  // +Z
+                "images/cubeMapping/coolHouse/back.hdr"    // -Z
+            );
         }
 
         /**
