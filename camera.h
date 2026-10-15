@@ -1,6 +1,9 @@
 #ifndef CAMERA_H
 #define CAMERA_H
 
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "external/stb_image_write.h" // allows hdr images to be written
+
 #include <omp.h>
 #include "hittable.h"
 #include "pdf.h"
@@ -175,8 +178,6 @@ class Camera {
 
             omp_set_num_threads(12); // set the thread limit to 12
 
-            std::cout << "P3\n" << image_width << ' ' << image_height << "\n255\n";
-
             std::vector<std::vector<Color>> framebuffer(image_height, std::vector<Color>(image_width)); // store rows before printing them
 
             // Tells OpenMP to distribute scanlines across all available CPU cores
@@ -201,14 +202,23 @@ class Camera {
                 }
             }
 
-            // Write the buffered pixels sequentially to standard output
+            std::vector<float> hdr_pixels(image_width * image_height * 3);
+            int index = 0;
             for (int j = 0; j < image_height; j++) {
                 for (int i = 0; i < image_width; i++) {
-                    write_color(std::cout, framebuffer[j][i]);
+                    hdr_pixels[index++] = framebuffer[j][i].r();
+                    hdr_pixels[index++] = framebuffer[j][i].g();
+                    hdr_pixels[index++] = framebuffer[j][i].b();
                 }
             }
 
-            std::clog << "\rDone.                 \n";
+            const char* output_file = "cool.hdr";
+            if (stbi_write_hdr(output_file, image_width, image_height, 3, hdr_pixels.data())) {
+                std::clog << "\nSuccessfully wrote HDR image to " << output_file << "\n";
+            } else {
+                std::cerr << "\nERROR: Failed to write HDR image file.\n";
+            }
+            std::clog << "Done.                \n";
         }
 };
 
