@@ -225,7 +225,7 @@ void cornell_box() {
     shared_ptr<Material> red = make_shared<Lambertian>(Color(0.65, 0.05, 0.05));
     shared_ptr<Material> white = make_shared<Lambertian>(Color(0.73, 0.73, 0.73));
     shared_ptr<Material> green = make_shared<Lambertian>(Color(0.12, 0.45, 0.15));
-    shared_ptr<Material> light = make_shared<DiffuseLight>(Color(15, 15, 15));
+    shared_ptr<Material> light = make_shared<DiffuseLight>(Color(15, 15, 15) * 50.0f); // *50 is from hdr support, can handle brighter values
 
     world.add(make_shared<Quad>(Point3(555,0,0), Vec3(0,555,0), Vec3(0,0,555), green));
     world.add(make_shared<Quad>(Point3(0,0,0), Vec3(0,555,0), Vec3(0,0,555), red));
@@ -574,7 +574,7 @@ void test_wavelength(int wavelength, const CIE1931& cie) { Spectrum spectrum; in
 int main() {
     // CIE1931 cie; test_wavelength(450, cie); test_wavelength(550, cie); test_wavelength(650, cie);
 
-    switch (15) {
+    switch (10) {
         case 1: bouncing_spheres(); break;
         case 2: checkered_spheres(); break;
         case 3: moon(); break;

@@ -93,20 +93,21 @@ inline void write_color(std::ostream& out, const Color& pixel_color) {
     // b = b / (b + 1.0);
 
     // safeguard from NaNs
-    if (r != r) r = 0.0;
-    if (g != g) g = 0.0;
-    if (b != b) b = 0.0;
+    if (r != r || r < 0.0) r = 0.0;
+    if (g != g || g < 0.0) g = 0.0;
+    if (b != b || b < 0.0) b = 0.0;
 
     r = linear_to_gamma(r);
     g = linear_to_gamma(g);
     b = linear_to_gamma(b);
 
-    static const Interval intensity(0.000, 0.999);
-    int rbyte = int(256 * intensity.clamp(r));
-    int gbyte = int(256 * intensity.clamp(g));
-    int bbyte = int(256 * intensity.clamp(b));
+    // Old PPM code, removed in favor of HDR support
+    // static const Interval intensity(0.000, 0.999);
+    // int rbyte = int(256 * intensity.clamp(r));
+    // int gbyte = int(256 * intensity.clamp(g));
+    // int bbyte = int(256 * intensity.clamp(b));
 
-    out << rbyte << ' ' << gbyte << ' ' << bbyte << '\n';
+    out << r << ' ' << g << ' ' << b << '\n';
 }
 
 #endif
