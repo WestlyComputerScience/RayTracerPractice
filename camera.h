@@ -176,7 +176,7 @@ class Camera {
         void render(const Hittable& world, const Hittable& lights) {
             initialize();
 
-            omp_set_num_threads(12); // set the thread limit to 12
+            omp_set_num_threads(14); // set the thread limit to 12
 
             std::vector<std::vector<Color>> framebuffer(image_height, std::vector<Color>(image_width)); // store rows before printing them
 

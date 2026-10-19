@@ -37,29 +37,31 @@ class Quadric : public Hittable {
 
             real sqrtd = std::sqrt(discriminant);
 
-            // find nearest root
+            // try nearest root
             real root = (-1 * b - sqrtd) / (2.0 * a);
-            if (!ray_t.surrounds(root)) {
-                root = (-1 * b + sqrtd) / (2.0 * a);
-                if (!ray_t.surrounds(root)) return false;
+            if (ray_t.surrounds(root)) {
+                Point3 p = r.at(root);
+                if (clipping_check(p, root)) {
+                    rec.t = root;
+                    rec.p = p;
+                    Vec3 outward_normal = compute_normal(p);
+                    rec.set_face_normal(r, outward_normal);
+                    rec.mat = mat;
+                    return true;
+                }
             }
 
-            Point3 p = r.at(root);
-            if (!clipping_check(p, root)) {
-                // try second root
-                if (root == (-1 * b - sqrtd) / (2.0 * a)) {
-                    root = (-1 * B + sqrtd) / (2.0 * a);
-                    if (ray_t.surrounds(root)) {
-                        p = r.at(root);
-                        if (clipping_check(p, root)) {
-                            rec.t = root;
-                            rec.p = p;
-                            Vec3 outward_normal = compute_normal(p);
-                            rec.set_face_normal(r, outward_normal);
-                            rec.mat = mat;
-                            return true;
-                        }
-                    }
+            // try second root
+            root = (-1 * b + sqrtd) / (2.0 * a);
+            if (ray_t.surrounds(root)) {
+                Point3 p = r.at(root);
+                if (clipping_check(p, root)) {
+                    rec.t = root;
+                    rec.p = p;
+                    Vec3 outward_normal = compute_normal(p);
+                    rec.set_face_normal(r, outward_normal);
+                    rec.mat = mat;
+                    return true;
                 }
             }
 
@@ -67,6 +69,54 @@ class Quadric : public Hittable {
         }
 
         Aabb bounding_box() const override { return bbox; }
+};
+
+class Cone : public Quadric {
+    private:
+        real radius;
+        real height;
+        real k; // ratio of radius to height
+
+        bool solve_coefficients(const Ray& r, real& a, real& b, real& c) const override {
+            real ox = r.origin().x();
+            real oy = r.origin().y();
+            real oz = r.origin().z();
+
+            real dx = r.direction().x();
+            real dy = r.direction().y();
+            real dz = r.direction().z();
+
+            a = dx * dx + dz * dz - (k * k) * (dy * dy);
+            b = 2.0 * (ox * dx + oz * dz - (k * k) * (oy * dy));
+            c = ox * ox + oz * oz - (k * k) * (oy * oy);
+
+            return true;
+        }
+
+        bool clipping_check(const Point3& p, real t) const override {
+            // check if hit point falls within height bounds of cone
+            return (p.y() >= 0.0 && p.y() <= height);
+        }
+
+        Vec3 compute_normal(const Point3& p) const override {
+            real r_val = std::sqrt(p.x() * p.x() + p.z() * p.z());
+            if (r_val == 0.0) return Vec3(0, 1, 0); // at apex
+
+            real nx = p.x();
+            real ny = -1 * k * r_val;
+            real nz = p.z();
+
+            return unit_vector(Vec3(nx, ny, nz));
+        }
+    public:
+        Cone(real radius, real height, shared_ptr<Material> mat) : Quadric(mat), radius(radius), height(height), k(radius / height) {}
+
+        Aabb bounding_box() const override {
+            real r = radius;
+            Point3 min_box(-1 * r, 0.0, -1 * r);
+            Point3 max_box(r, height, r);
+            return Aabb(min_box, max_box);
+        }
 };
 
 #endif

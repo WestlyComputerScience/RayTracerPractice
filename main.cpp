@@ -17,6 +17,7 @@
 #include "triangle.h"
 #include "quad.h"
 #include "spectrum.h"
+#include "quadrics.h"
 
 /**
 * The main class used to setup ray tracer scenarios.
@@ -225,7 +226,7 @@ void cornell_box() {
     shared_ptr<Material> red = make_shared<Lambertian>(Color(0.65, 0.05, 0.05));
     shared_ptr<Material> white = make_shared<Lambertian>(Color(0.73, 0.73, 0.73));
     shared_ptr<Material> green = make_shared<Lambertian>(Color(0.12, 0.45, 0.15));
-    shared_ptr<Material> light = make_shared<DiffuseLight>(Color(15, 15, 15) * 50.0f); // *50 is from hdr support, can handle brighter values
+    shared_ptr<Material> light = make_shared<DiffuseLight>(Color(15, 15, 15)); // *50 is from hdr support, can handle brighter values
 
     world.add(make_shared<Quad>(Point3(555,0,0), Vec3(0,555,0), Vec3(0,0,555), green));
     world.add(make_shared<Quad>(Point3(0,0,0), Vec3(0,555,0), Vec3(0,0,555), red));
@@ -257,7 +258,7 @@ void cornell_box() {
 
     cam.aspect_ratio = 1.0;
     cam.image_width = 600;
-    cam.samples_per_pixel = 1000;
+    cam.samples_per_pixel = 100;
     cam.max_ray_bounces = 50;
     cam.background = Color(0,0,0);
 
@@ -568,6 +569,49 @@ void cube_mapping() {
     cam.render(world, lights);
 }
 
+void quadrics_cornell_box() {
+    HittableList world;
+
+    shared_ptr<Material> red = make_shared<Lambertian>(Color(0.65, 0.05, 0.05));
+    shared_ptr<Material> white = make_shared<Lambertian>(Color(0.73, 0.73, 0.73));
+    shared_ptr<Material> green = make_shared<Lambertian>(Color(0.12, 0.45, 0.15));
+    shared_ptr<Material> light = make_shared<DiffuseLight>(Color(15, 15, 15));
+
+    world.add(make_shared<Quad>(Point3(555,0,0), Vec3(0,555,0), Vec3(0,0,555), green));
+    world.add(make_shared<Quad>(Point3(0,0,0), Vec3(0,555,0), Vec3(0,0,555), red));
+    world.add(make_shared<Quad>(Point3(343, 554, 332), Vec3(-130,0,0), Vec3(0,0,-105), light));
+    world.add(make_shared<Quad>(Point3(0,0,0), Vec3(555,0,0), Vec3(0,0,555), white));
+    world.add(make_shared<Quad>(Point3(555,555,555), Vec3(-555,0,0), Vec3(0,0,-555), white));
+    world.add(make_shared<Quad>(Point3(0,0,555), Vec3(555,0,0), Vec3(0,555,0), white));
+
+    shared_ptr<Material> aluminum = make_shared<Metal>(Color(0.8, 0.85, 0.88), 0.0);
+    shared_ptr<Hittable> cone1 = make_shared<Cone>(40, 100, red);
+    cone1 = make_shared<Translate>(cone1, Vec3(265, 0, 295));
+    world.add(cone1);
+
+    shared_ptr<Material> empty_material = shared_ptr<Material>();
+    HittableList lights;
+    lights.add(make_shared<Quad>(Point3(343, 554, 332), Vec3(-130, 0, 0), Vec3(0, 0, -105), empty_material));
+    lights.add(make_shared<Sphere>(Point3(190, 90, 190), 90, empty_material));
+
+    Camera cam;
+
+    cam.aspect_ratio = 1.0;
+    cam.image_width = 600;
+    cam.samples_per_pixel = 100;
+    cam.max_ray_bounces = 50;
+    cam.background = Color(0,0,0);
+
+    cam.vfov = 40;
+    cam.lookfrom = Point3(278, 278, -800);
+    cam.lookat = Point3(278, 278, 0);
+    cam.vup = Vec3(0,1,0);
+
+    cam.defocus_angle = 0;
+
+    cam.render(world, lights);
+}
+
 /*
 void test_wavelength(int wavelength, const CIE1931& cie) { Spectrum spectrum; int index = wavelength - 360; spectrum[index] = 1.0; XYZ xyz = spectrum.toXYZ(cie); Color color = xyz.toColor(); std::cout << "============================\n"; std::cout << wavelength << " nm\n"; std::cout << "============================\n"; std::cout << "XYZ:\n"; std::cout << "X = " << xyz.x << '\n'; std::cout << "Y = " << xyz.y << '\n'; std::cout << "Z = " << xyz.z << '\n'; std::cout << "\nLinear RGB:\n"; std::cout << "R = " << color.r() << '\n'; std::cout << "G = " << color.g() << '\n'; std::cout << "B = " << color.b() << '\n'; std::cout << '\n'; }
 */
@@ -590,6 +634,7 @@ int main() {
         case 13: render_blender_triangle_mesh(); break;
         case 14: my_midterm_scene(); break;
         case 15: cube_mapping(); break;
+        case 16: quadrics_cornell_box(); break;
     }
 }
 
