@@ -585,9 +585,12 @@ void quadrics_cornell_box() {
     world.add(make_shared<Quad>(Point3(0,0,555), Vec3(555,0,0), Vec3(0,555,0), white));
 
     shared_ptr<Material> aluminum = make_shared<Metal>(Color(0.8, 0.85, 0.88), 0.0);
-    shared_ptr<Hittable> cone1 = make_shared<Cone>(40, 100, red);
+    shared_ptr<Hittable> cone1 = make_shared<Cone>(Point3(0, 200, 0), 40, 100, red);
     cone1 = make_shared<Translate>(cone1, Vec3(265, 0, 295));
     world.add(cone1);
+
+    shared_ptr<Hittable> cylinder1 = make_shared<Cylinder>(Point3(200, 100, 0), 40, 100, red);
+    world.add(cylinder1);
 
     shared_ptr<Material> empty_material = shared_ptr<Material>();
     HittableList lights;
@@ -618,7 +621,7 @@ void test_wavelength(int wavelength, const CIE1931& cie) { Spectrum spectrum; in
 int main() {
     // CIE1931 cie; test_wavelength(450, cie); test_wavelength(550, cie); test_wavelength(650, cie);
 
-    switch (10) {
+    switch (16) {
         case 1: bouncing_spheres(); break;
         case 2: checkered_spheres(); break;
         case 3: moon(); break;

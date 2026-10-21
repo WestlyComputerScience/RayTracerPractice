@@ -9,8 +9,8 @@
 class Quadric : public Hittable {
     private:
         shared_ptr<Material> mat;
-        Aabb bbox;
     protected:
+        Aabb bbox;
         /**
         * Computes quadric coefficients
         */
@@ -73,14 +73,17 @@ class Quadric : public Hittable {
 
 class Cone : public Quadric {
     private:
+        Point3 center;
         real radius;
         real height;
         real k; // ratio of radius to height
 
         bool solve_coefficients(const Ray& r, real& a, real& b, real& c) const override {
-            real ox = r.origin().x();
-            real oy = r.origin().y();
-            real oz = r.origin().z();
+            Point3 local_origin = r.origin() - center;
+
+            real ox = local_origin.x();
+            real oy = local_origin.y();
+            real oz = local_origin.z();
 
             real dx = r.direction().x();
             real dy = r.direction().y();
@@ -94,29 +97,99 @@ class Cone : public Quadric {
         }
 
         bool clipping_check(const Point3& p, real t) const override {
+            real local_y = p.y() - center.y();
+
             // check if hit point falls within height bounds of cone
-            return (p.y() >= 0.0 && p.y() <= height);
+            return (local_y >= 0.0 && local_y <= height);
         }
 
         Vec3 compute_normal(const Point3& p) const override {
-            real r_val = std::sqrt(p.x() * p.x() + p.z() * p.z());
+            Point3 local_p = p - center;
+            real r_val = std::sqrt(local_p.x() * local_p.x() + local_p.z() * local_p.z());
             if (r_val == 0.0) return Vec3(0, 1, 0); // at apex
 
-            real nx = p.x();
+            real nx = local_p.x();
             real ny = -1 * k * r_val;
-            real nz = p.z();
+            real nz = local_p.z();
 
             return unit_vector(Vec3(nx, ny, nz));
         }
     public:
-        Cone(real radius, real height, shared_ptr<Material> mat) : Quadric(mat), radius(radius), height(height), k(radius / height) {}
-
-        Aabb bounding_box() const override {
-            real r = radius;
-            Point3 min_box(-1 * r, 0.0, -1 * r);
-            Point3 max_box(r, height, r);
-            return Aabb(min_box, max_box);
+        /**
+         * Constructor for a cone centered at (0, 0, 0).
+         */
+        Cone(real radius, real height, shared_ptr<Material> mat) : Quadric(mat), center(Point3(0, 0, 0)), radius(radius), height(height), k(radius / height) {
+            Vec3 r_vec(radius, radius, radius);
+            bbox = Aabb(center - r_vec, center + Vec3(radius, height, radius));
         }
+
+        /**
+         * Constructor for a cone centered at a specified point.
+         */
+        Cone(const Point3& location, real radius, real height, std::shared_ptr<Material> mat) : Quadric(mat), center(location), radius(radius), height(height), k(radius / height) {
+            Vec3 r_vec(radius, radius, radius);
+            Point3 min_point = center - r_vec;
+            Point3 max_point = center + Vec3(radius, height, radius);
+            bbox = Aabb(min_point, max_point);
+        }
+
+        Aabb bounding_box() const override { return bbox; }
+};
+
+class Cylinder : public Quadric {
+    private:
+        Point3 center;
+        real radius;
+        real height;
+
+        bool solve_coefficients(const Ray& r, real &a, real &b, real &c) const override {
+            Point3 local_origin = r.origin() - center;
+
+            real ox = local_origin.x();
+            real oz = local_origin.z();
+
+            real dx = r.direction().x();
+            real dz = r.direction().z();
+
+            a = dx * dx + dz * dz;
+            b = 2.0 * (ox * dx + oz * dz);
+            c = ox * ox + oz * oz - radius * radius;
+
+            return true;
+        }
+
+        bool clipping_check(const Point3& p, real t) const override {
+            real local_y = p.y() - center.y();
+
+            return (local_y >= 0.0 && local_y <= height);
+        }
+
+        Vec3 compute_normal(const Point3& p) const override {
+            Point3 local_p = p - center;
+
+            return unit_vector(Vec3(local_p.x(), 0.0, local_p.z()));
+        }
+
+    public:
+        /**
+         * Constructor for a cylinder centered at (0, 0, 0).
+         */
+        Cylinder(real radius, real height, shared_ptr<Material> mat) : Quadric(mat), center(Point3(0, 0, 0)), radius(radius), height(height) {
+            Point3 min_point = center - Vec3(radius, 0.0, radius);
+            Point3 max_point = center + Vec3(radius, height, radius);
+            bbox = Aabb(min_point, max_point);
+        }
+
+        /**
+         * Constructor for a cylinder centered at a specified point location.
+         */
+        Cylinder(const Point3& location, real radius, real height, shared_ptr<Material> mat) : Quadric(mat), center(location), radius(radius), height(height) {
+            Point3 min_point = center - Vec3(radius, 0.0, radius);
+            Point3 max_point = center + Vec3(radius, height, radius);
+            bbox = Aabb(min_point, max_point);
+        }
+
+        Aabb bounding_box() const override { return bbox; }
 };
 
 #endif
