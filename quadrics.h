@@ -192,4 +192,120 @@ class Cylinder : public Quadric {
         Aabb bounding_box() const override { return bbox; }
 };
 
+class Hyperboloid : public Quadric {
+    private:
+        Point3 center;
+        real throat_radius;
+        real height;
+        real flare;
+
+        bool solve_coefficients(const Ray& r, real& a, real& b, real& c) const override {
+            Point3 local_origin = r.origin() - center;
+
+            real ox = local_origin.x();
+            real oy = local_origin.y();
+            real oz = local_origin.z();
+
+            real dx = r.direction().x();
+            real dy = r.direction().y();
+            real dz = r.direction().z();
+
+            real f2 = flare * flare;
+
+            a = dx * dx + dz * dz - f2 * (dy * dy);
+            b = 2.0 * (ox * dx + oz * dz - f2 * (oy * dy));
+            c = ox * ox + oz * oz - f2 * (oy * oy) - throat_radius * throat_radius;
+
+            return true;
+        }
+
+        bool clipping_check(const Point3& p, real t) const override {
+            real local_y = p.y() - center.y();
+
+            return (local_y >= (-1 * height) / 2.0 && local_y <= height / 2.0);
+        }
+
+        Vec3 compute_normal(const Point3& p) const override {
+            Point3 local_p = p - center;
+            real f2 = flare * flare;
+
+            real nx = local_p.x();
+            real ny = -1 * f2 * local_p.y();
+            real nz = local_p.z();
+
+            return unit_vector(Vec3(nx, ny, nz));
+        }
+
+    public:
+        /**
+         * Constructor for a hyperboloid centered at (0, 0, 0) (middle of hourglass) with flare 1.0.
+         */
+        Hyperboloid(const Point3& location, real throat_radius, real height, shared_ptr<Material> mat)
+            : Hyperboloid(location, throat_radius, height, 1.0, mat) {}
+
+        /**
+         * Constructor for hyperboloid at a specific point location and flare.
+         */
+        Hyperboloid(const Point3& location, real throat_radius, real height, real flare, shared_ptr<Material> mat) 
+            : Quadric(mat), center(location), throat_radius(throat_radius), height(height), flare(flare) {
+
+            // Widest point at bottom rims
+            real half_h = height / 2.0;
+            real max_radius = std::sqrt(throat_radius * throat_radius + (flare * flare) * (half_h * half_h));
+
+            Point3 min_point = center - Vec3(max_radius, half_h, max_radius);
+            Point3 max_point = center + Vec3(max_radius, half_h, max_radius);
+            bbox = Aabb(min_point, max_point);
+        }
+};
+
+class HyperbolicParaboloid : public Quadric {
+    private:
+        Point3 center;
+        real size;
+        real height;
+
+        bool solve_coefficients(const Ray& r, real& a, real& b, real& c) const override {
+            Point3 local_origin = r.origin() - center;
+
+            real ox = local_origin.x();
+            real oy = local_origin.y();
+            real oz = local_origin.z();
+
+            real dx = r.direction().x();
+            real dy = r.direction().y();
+            real dz = r.direction().z();
+
+            a = dx * dx - dz * dz;
+            b = 2.0 * (ox * dx - oz * dz) - dy;
+            c = ox * ox - oz * oz - oy;
+
+            return true;
+        }
+
+        bool clipping_check(const Point3& p, real t) const override {
+            Point3 local_p = p - center;
+
+            return (local_p.y() >= -height && local_p.y() <= height);
+        }
+
+        Vec3 compute_normal(const Point3& p) const override {
+            Point3 local_p = p - center;
+
+            real nx = 2.0 * local_p.x();
+            real ny = -1.0;
+            real nz = -2.0 * local_p.z();
+
+            return unit_vector(Vec3(nx, ny, nz));
+        }
+    public:
+        HyperbolicParaboloid(const Point3& location, real size, real height, shared_ptr<Material> mat) : Quadric(mat), center(location), size(size), height(height) {
+            real max_y = size * size;
+
+            Point3 min_point = center - Vec3(size, max_y, size);
+            Point3 max_point = center + Vec3(size, max_y, size);
+            bbox = Aabb(min_point, max_point);
+        }
+};
+
 #endif

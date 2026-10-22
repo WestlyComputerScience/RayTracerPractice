@@ -592,6 +592,12 @@ void quadrics_cornell_box() {
     shared_ptr<Hittable> cylinder1 = make_shared<Cylinder>(Point3(200, 100, 0), 40, 100, red);
     world.add(cylinder1);
 
+    shared_ptr<Hittable> hyperbola1 = make_shared<Hyperboloid>(Point3(0, 100, 200), 30, 100, red);
+    world.add(hyperbola1);
+
+    shared_ptr<Hittable> hyperbolicParaboloid1 = make_shared<HyperbolicParaboloid>(Point3(400, 100, 300), 40, 40, red);
+    world.add(hyperbolicParaboloid1);
+
     shared_ptr<Material> empty_material = shared_ptr<Material>();
     HittableList lights;
     lights.add(make_shared<Quad>(Point3(343, 554, 332), Vec3(-130, 0, 0), Vec3(0, 0, -105), empty_material));
