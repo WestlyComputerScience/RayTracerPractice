@@ -286,7 +286,9 @@ class HyperbolicParaboloid : public Quadric {
         bool clipping_check(const Point3& p, real t) const override {
             Point3 local_p = p - center;
 
-            return (local_p.y() >= -height && local_p.y() <= height);
+            real r_sq = local_p.x() * local_p.x() + local_p.z() * local_p.z();
+
+            return (r_sq <= size * size);
         }
 
         Vec3 compute_normal(const Point3& p) const override {
