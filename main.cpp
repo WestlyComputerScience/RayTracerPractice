@@ -599,13 +599,13 @@ void quadrics_cornell_box() {
     shared_ptr<Hittable> hyperbolicParaboloid1 = make_shared<HyperbolicParaboloid>(Point3(400, 100, 300), 40, 40, red);
     world.add(hyperbolicParaboloid1);
 
-    shared_ptr<Hittable> torus = make_shared<Torus>(Point3(200, 300, 200), 40, 40, red);
+    shared_ptr<Hittable> torus = make_shared<Torus>(Point3(150, 200, 200), 40, 40, red);
     world.add(torus);
 
     shared_ptr<Material> empty_material = shared_ptr<Material>();
     HittableList lights;
     lights.add(make_shared<Quad>(Point3(343, 554, 332), Vec3(-130, 0, 0), Vec3(0, 0, -105), empty_material));
-    lights.add(make_shared<Sphere>(Point3(190, 90, 190), 90, empty_material));
+    // lights.add(make_shared<Sphere>(Point3(190, 90, 190), 90, empty_material));
 
     Camera cam;
 
@@ -622,7 +622,8 @@ void quadrics_cornell_box() {
 
     cam.defocus_angle = 0;
 
-    cam.render(world, lights);
+    BvhNode bvh(world);
+    cam.render(bvh, lights);
 }
 
 /*

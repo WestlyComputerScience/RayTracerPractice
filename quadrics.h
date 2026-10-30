@@ -288,7 +288,9 @@ class HyperbolicParaboloid : public Quadric {
 
             real r_sq = local_p.x() * local_p.x() + local_p.z() * local_p.z();
 
-            return (r_sq <= size * size);
+            real half_height = height / 2.0;
+
+            return (r_sq <= size * size && local_p.y() >= -half_height && local_p.y() <= half_height);
         }
 
         Vec3 compute_normal(const Point3& p) const override {

@@ -1,79 +1,137 @@
 #ifndef QUARTIC_H
 #define QUARTIC_H
 
-inline int solve_polynomial_degree_4(real a, real b, real c, real d, real e, std::vector<real>& roots) {
+
+inline int solve_polynomial_degree_4(
+    real a, real b, real c, real d, real e,
+    std::vector<real>& roots
+) {
     if (std::abs(a) < 1e-12) return 0;
 
-    b /= a; c /= a; d /= a; e /= a;
+    // Normalize coefficients
+    b /= a;
+    c /= a;
+    d /= a;
+    e /= a;
 
+    // Convert to depressed quartic:
+    // y^4 + p*y^2 + q*y + r = 0
     real b2 = b * b;
+
     real p = c - 0.375 * b2;
     real q = d - 0.5 * b * c + 0.125 * b2 * b;
-    real r = e - 0.25 * b * d + 0.0625 * b2 * c - 0.01171875 * b2 * b2;
+    real r = e - 0.25 * b * d
+               + 0.0625 * b2 * c
+               - 0.01171875 * b2 * b2;
 
+    // Special case: biquadratic equation (q = 0)
     if (std::abs(q) < 1e-12) {
         real disc = p * p - 4.0 * r;
-        if (disc >= 0) {
+
+        if (disc >= 0.0) {
             real sq_disc = std::sqrt(disc);
+
             real y1 = (-p - sq_disc) * 0.5;
             real y2 = (-p + sq_disc) * 0.5;
-            if (y1 >= 0) {
+
+            if (y1 >= 0.0) {
                 real sy = std::sqrt(y1);
+
                 roots.push_back(sy - 0.25 * b);
                 roots.push_back(-sy - 0.25 * b);
             }
-            if (y2 >= 0 && y2 != y1) {
+
+            if (y2 >= 0.0 && y2 != y1) {
                 real sy = std::sqrt(y2);
+
                 roots.push_back(sy - 0.25 * b);
                 roots.push_back(-sy - 0.25 * b);
             }
         }
-        return roots.size();
+
+        return static_cast<int>(roots.size());
     }
+
+    // Solve Ferrari's resolvent cubic:
+    // z^3 + 2p*z^2 + (p^2 - 4r)*z - q^2 = 0
 
     real rc_b = 2.0 * p;
     real rc_c = p * p - 4.0 * r;
     real rc_d = -q * q;
 
+    // Convert cubic to depressed cubic
     real pb = rc_c - rc_b * rc_b / 3.0;
-    real qb = (2.0 * rc_b * rc_b * rc_b - 9.0 * rc_b * rc_c + 27.0 * rc_d) / 27.0;
 
-    real discriminant = qb * qb / 4.0 + pb * pb * pb / 27.0;
-    real z = 0;
-    if (discriminant >= 0) {
+    real qb = (
+        2.0 * rc_b * rc_b * rc_b
+        - 9.0 * rc_b * rc_c
+        + 27.0 * rc_d
+    ) / 27.0;
+
+    real discriminant =
+        qb * qb / 4.0 + pb * pb * pb / 27.0;
+
+    real z;
+
+    if (discriminant >= 0.0) {
         real sd = std::sqrt(discriminant);
+
         real u = std::cbrt(-qb / 2.0 + sd);
         real v = std::cbrt(-qb / 2.0 - sd);
+
         z = u + v - rc_b / 3.0;
-    } else {
-        real r_c = std::sqrt(-pb * pb * pb / 27.0);
-        real phi = std::acos(-qb / (2.0 * r_c));
-        z = 2.0 * std::cbrt(r_c) * std::cos(phi / 3.0) - rc_b / 3.0;
+    }
+    else {
+        real sqrt_term = std::sqrt(-pb / 3.0);
+
+        real phi = std::acos(
+            std::clamp(
+                -qb / (2.0 * sqrt_term * sqrt_term * sqrt_term),
+                -1.0, 1.0
+            )
+        );
+
+        // Largest real root of the resolvent cubic
+        z = 2.0 * sqrt_term * std::cos(phi / 3.0)
+            - rc_b / 3.0;
     }
 
-    real term1 = 2.0 * z - p;
-    if (term1 < 0) return 0;
-    real m = std::sqrt(term1);
+    // z = m^2
+    if (z <= 0.0) return 0;
 
-    if (std::abs(m) > 1e-12) {
-        real quad1_c = z + q / m;
-        real quad2_c = z - q / m;
+    real m = std::sqrt(z);
 
-        real d1 = m * m - 4.0 * quad1_c;
-        if (d1 >= 0) {
-            real sd1 = std::sqrt(d1);
-            roots.push_back((-m - sd1) * 0.5 - 0.25 * b);
-            roots.push_back((-m + sd1) * 0.5 - 0.25 * b);
-        }
-        real d2 = m * m - 4.0 * quad2_c;
-        if (d2 >= 0) {
-            real sd2 = std::sqrt(d2);
-            roots.push_back((m - sd2) * 0.5 - 0.25 * b);
-            roots.push_back((m + sd2) * 0.5 - 0.25 * b);
-        }
+    // Factor into two quadratic equations:
+    //
+    // (y^2 + m*y + A)(y^2 - m*y + B)
+    //
+    // A = (p + z - q/m) / 2
+    // B = (p + z + q/m) / 2
+
+    real A = (p + z - q / m) / 2.0;
+    real B = (p + z + q / m) / 2.0;
+
+    // Solve first quadratic: y^2 + m*y + A
+    real d1 = m * m - 4.0 * A;
+
+    if (d1 >= 0.0) {
+        real sd1 = std::sqrt(d1);
+
+        roots.push_back((-m - sd1) * 0.5 - 0.25 * b);
+        roots.push_back((-m + sd1) * 0.5 - 0.25 * b);
     }
 
-    return roots.size();
+    // Solve second quadratic: y^2 - m*y + B
+    real d2 = m * m - 4.0 * B;
+
+    if (d2 >= 0.0) {
+        real sd2 = std::sqrt(d2);
+
+        roots.push_back((m - sd2) * 0.5 - 0.25 * b);
+        roots.push_back((m + sd2) * 0.5 - 0.25 * b);
+    }
+
+    return static_cast<int>(roots.size());
 }
 
 class Quartic : public Hittable {
@@ -162,7 +220,7 @@ class Torus : public Quartic {
 
             return true;
         }
-
+        
         Vec3 compute_normal(const Point3& p) const override {
             Point3 local_p = p - center;
 
@@ -174,10 +232,11 @@ class Torus : public Quartic {
             real mar = major_radius;
             real mir = minor_radius;
 
-            real common = 4.0 * (sum_sq - mar * mar - mir * mir);
-            real nx = common * x;
-            real ny = common * y - 8.0 * mar * mar * y;
-            real nz = common * z;
+            real common = 4.0 * (sum_sq + mar * mar - mir * mir);
+
+            real nx = (common - 8.0 * mar * mar) * x;
+            real ny = common * y;
+            real nz = (common - 8.0 * mar * mar) * z;
 
             return unit_vector(Vec3(nx, ny, nz));
         }
