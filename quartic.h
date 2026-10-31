@@ -252,4 +252,85 @@ class Torus : public Quartic {
             }
 };
 
+class BohemianDome : public Quartic {
+    private:
+        Point3 center;
+        real radius;
+        real max_extent;
+
+        int solve_quartic(real a, real b, real c, real d, real e, std::vector<real>& roots) const override {
+            return solve_polynomial_degree_4(a, b, c, d, e, roots);
+        }
+
+        bool solve_coefficients(const Ray& r, real& a, real& b, real& c, real& d, real& e) const override {
+            Point3 oc = r.origin() - center;
+
+            real ox = oc.x();
+            real oy = oc.y();
+            real oz = oc.z();
+
+            real dx = r.direction().x();
+            real dy = r.direction().y();
+            real dz = r.direction().z();
+
+            real as = dx * dx + dy * dy - dz * dz;
+            real bs = 2.0 * (ox * dx + oy * dy - oz * dz);
+            real cs = ox * ox + oy * oy - oz * oz;
+
+            real r2 = radius * radius;
+
+            a = as * as;
+            b = 2.0 * as * bs;
+            c = bs * bs + 2.0 * as * cs - 4.0 * r2 * (dx * dx + dy * dy);
+            d = 2.0 * bs * cs - 8.0 * r2 * (ox * dx + oy * dy);
+            e = cs * cs - 4.0 * r2 * (ox * ox + oy * oy);
+
+            return true;
+        }
+
+        bool clipping_check(const Point3& p, real t) const override {
+            Point3 local_p = p - center;
+
+            real x = local_p.x();
+            real y = local_p.y();
+            real z = local_p.z();
+
+            real xy_extent = radius * 2.0;
+            real z_extent = radius * 2.0 * std::sqrt(2.0);
+
+            if (std::abs(x) > xy_extent ||
+                std::abs(y) > xy_extent ||
+                std::abs(z) > z_extent)
+                return false;
+
+            return true;
+        }
+
+        Vec3 compute_normal(const Point3& p) const override {
+            Point3 local_p = p - center;
+
+            real x = local_p.x();
+            real y = local_p.y();
+            real z = local_p.z();
+
+            real x2_y2_z2 = x * x + y * y - z * z;
+            real r2 = radius * radius;
+
+            real nx = 4.0 * x * (x2_y2_z2 - 2.0 * r2);
+            real ny = 4.0 * y * (x2_y2_z2 - 2.0 * r2);
+            real nz = -4.0 * z * x2_y2_z2;
+
+            return unit_vector(Vec3(nx, ny, nz));
+        }
+    public:
+        BohemianDome(const Point3& center, real radius, shared_ptr<Material> mat) : Quartic(mat), center(center), radius(radius), max_extent(radius * 2.0) {
+            real xy_bound = radius * 2.0;
+            real z_bound = radius * 2.0 * std::sqrt(2.0);
+
+            bbox = Aabb(
+                center - Vec3(xy_bound, xy_bound, z_bound),
+                center + Vec3(xy_bound, xy_bound, z_bound));
+        }
+};
+
 #endif

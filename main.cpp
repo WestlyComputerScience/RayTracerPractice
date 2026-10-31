@@ -602,6 +602,9 @@ void quadrics_cornell_box() {
     shared_ptr<Hittable> torus = make_shared<Torus>(Point3(150, 200, 200), 40, 40, red);
     world.add(torus);
 
+    shared_ptr<Hittable> bohemianDome = make_shared<BohemianDome>(Point3(300, 200, 300), 40, red);
+    world.add(bohemianDome);
+
     shared_ptr<Material> empty_material = shared_ptr<Material>();
     HittableList lights;
     lights.add(make_shared<Quad>(Point3(343, 554, 332), Vec3(-130, 0, 0), Vec3(0, 0, -105), empty_material));
