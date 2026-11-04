@@ -1,8 +1,108 @@
 #ifndef QUARTIC_H
 #define QUARTIC_H
 
+inline int solve_linear(real a, real b, std::vector<real>& roots) {
+    if (std::abs(a) < 1e-12)
+        return 0;
+
+    roots.push_back(-b / a);
+    return 1;
+}
+
+inline int solve_quadratic(real a, real b, real c, std::vector<real>& roots) {
+    if (std::abs(a) < 1e-12)
+        return solve_linear(b, c, roots);
+
+    real discriminant = b * b - 4.0 * a * c;
+
+    if (discriminant < 0.0)
+        return 0;
+
+    real sqrt_disc = std::sqrt(discriminant);
+
+    if (sqrt_disc == 0.0) {
+        roots.push_back(-b / (2.0 * a));
+        return 1;
+    }
+
+    real q = -0.5 * (b + std::copysign(sqrt_disc, b));
+
+    roots.push_back(q / a);
+    roots.push_back(c / q);
+
+    return 2;
+}
+
+inline int solve_cubic(real a, real b, real c, real d, std::vector<real>& roots) {
+    if (std::abs(a) < 1e-12)
+        return solve_quadratic(b, c, d, roots);
+
+    // Normalize
+    b /= a;
+    c /= a;
+    d /= a;
+
+    // Depressed cubic: x^3 + p*x + q = 0
+    real p = c - b * b / 3.0;
+
+    real q = 2.0 * b * b * b / 27.0
+           - b * c / 3.0
+           + d;
+
+    real discriminant =
+        q * q / 4.0 + p * p * p / 27.0;
+
+    real shift = b / 3.0;
+
+    if (discriminant > 0.0) {
+        real sqrt_disc = std::sqrt(discriminant);
+
+        real u = std::cbrt(-q / 2.0 + sqrt_disc);
+        real v = std::cbrt(-q / 2.0 - sqrt_disc);
+
+        roots.push_back(u + v - shift);
+    }
+    else if (discriminant == 0.0) {
+        real u = std::cbrt(-q / 2.0);
+
+        roots.push_back(2.0 * u - shift);
+        roots.push_back(-u - shift);
+    }
+    else {
+        real radius = 2.0 * std::sqrt(-p / 3.0);
+
+        real denominator = 2.0 * std::sqrt(
+            -(p * p * p) / 27.0
+        );
+
+        real angle = std::acos(
+            std::clamp(-q / denominator, real(-1.0), real(1.0))
+        );
+
+        for (int k = 0; k < 3; k++) {
+            roots.push_back(
+                radius * std::cos(
+                    (angle + 2.0 * M_PI * k) / 3.0
+                ) - shift
+            );
+        }
+    }
+
+    return static_cast<int>(roots.size());
+}
+
 inline int solve_polynomial_degree_4(real a, real b, real c, real d, real e, std::vector<real>& roots) {
-    if (std::abs(a) < 1e-12) return 0;
+    if (std::abs(a) < 1e-12) {
+        if (std::abs(b) < 1e-12) {
+            if (std::abs(c) < 1e-12) {
+                return solve_linear(d, e, roots);
+            }
+
+            return solve_quadratic(c, d, e, roots);
+        }
+
+        return solve_cubic(b, c, d, e, roots);
+    }
 
     // Normalize coefficients
     b /= a;
@@ -160,7 +260,7 @@ class Quartic : public Hittable {
 
             std::sort(roots.begin(), roots.end());
 
-            const real min_t_epsilon = 0.001;
+            const real min_t_epsilon = 0.0001;
 
             for (real root : roots) {
                 if (root > min_t_epsilon && ray_t.surrounds(root)) {
@@ -314,10 +414,12 @@ class BohemianDome : public Quartic {
 
         bool clipping_check(const Point3& p, real t) const override {
             Point3 local_p = p - center;
-
-            return std::abs(local_p.x()) <= radius &&
-                std::abs(local_p.y()) <= radius * 2.0 &&
-                std::abs(local_p.z()) <= radius;
+            real r_val = radius * 1.001; // small epsilon multiplier for numerical precision
+            real max_h = 2.0 * radius * 1.001; // max height reaches +/- 2r
+            
+            return std::abs(local_p.x()) <= r_val &&
+                   std::abs(local_p.z()) <= r_val &&
+                   std::abs(local_p.y()) <= max_h;
         }
 
         Vec3 compute_normal(const Point3& p) const override {
@@ -327,12 +429,16 @@ class BohemianDome : public Quartic {
             real y = local_p.y();
             real z = local_p.z();
 
-            real sum_sq = x * x + y * y + z * z;
+            real x2 = x * x;
+            real y2 = y * y;
+            real z2 = z * z;
             real r2 = radius * radius;
 
-            real nx = 4.0 * x * (sum_sq - 2.0 * y * y);
-            real ny = 4.0 * y * (sum_sq - 2.0 * x * x);
-            real nz = 4.0 * z * (sum_sq - 2.0 * r2);
+            real s = x2 + y2 + z2 - 2.0 * r2;
+
+            real nx = 4.0 * x * (s + 2.0 * (r2 - z2));
+            real ny = 4.0 * y * s;
+            real nz = 4.0 * z * (s + 2.0 * (r2 - x2));
 
             Vec3 normal(nx, ny, nz);
             if (normal.length_squared() < 1e-12) {
@@ -350,11 +456,13 @@ class BohemianDome : public Quartic {
         }
 
     public:
-        BohemianDome(const Point3& center, real radius, shared_ptr<Material> mat) : Quartic(mat), center(center), radius(radius) {
-
+        BohemianDome(const Point3& center, real radius, shared_ptr<Material> mat) 
+            : Quartic(mat), center(center), radius(radius) {
+            // Width/Depth bounds are [-radius, radius], height bounds are [-2*radius, 2*radius]
             bbox = Aabb(
-                center - Vec3(radius, radius * 2.0, radius),
-                center + Vec3(radius, radius * 2.0, radius));
+                center - Vec3(radius, 2.0 * radius, radius),
+                center + Vec3(radius, 2.0 * radius, radius)
+            );
         }
 };
 
@@ -404,33 +512,42 @@ class ChairSurface : public Quartic {
             return true;
         }
 
-        // Override hit to intersect with a bounding cylinder interval first
         bool hit(const Ray& r, Interval ray_t, HitRecord& rec) const override {
             Point3 oc = r.origin() - center;
             real ox = oc.x(), oy = oc.y();
             real dx = r.direction().x(), dy = r.direction().y();
 
-            // 1. Intersect ray with infinite cylinder in xy-plane: x^2 + y^2 <= R^2
+            // 1. Intersect ray with infinite cylinder in xy-plane
             real max_radius = scale_k * 0.95;
             real A_cyl = dx * dx + dy * dy;
             real B_cyl = 2.0 * (ox * dx + oy * dy);
             real C_cyl = ox * ox + oy * oy - max_radius * max_radius;
 
-            real disc_cyl = B_cyl * B_cyl - 4.0 * A_cyl * C_cyl;
-            if (disc_cyl < 0.0) return false;
+            // Initialize interval to the ray's valid interval
+            real cyl_tmin = ray_t.min;
+            real cyl_tmax = ray_t.max;
 
-            real sqrd = std::sqrt(disc_cyl);
-            real t0 = (-B_cyl - sqrd) / (2.0 * A_cyl);
-            real t1 = (-B_cyl + sqrd) / (2.0 * A_cyl);
+            if (A_cyl < 1e-12) {
+                // Ray is parallel to the cylinder's z-axis
+                if (C_cyl > 0.0) return false;
+            }
+            else {
+                real disc_cyl = B_cyl * B_cyl - 4.0 * A_cyl * C_cyl;
 
-            if (t0 > t1) std::swap(t0, t1);
+                if (disc_cyl < 0.0) return false;
 
-            // Factor in height bounds (z-axis limits)
-            real max_height = scale_k * 1.05;
-            real cyl_tmin = std::max(ray_t.min, t0);
-            real cyl_tmax = std::min(ray_t.max, t1);
+                real sqrd = std::sqrt(disc_cyl);
 
-            if (cyl_tmin > cyl_tmax) return false;
+                real t0 = (-B_cyl - sqrd) / (2.0 * A_cyl);
+                real t1 = (-B_cyl + sqrd) / (2.0 * A_cyl);
+
+                if (t0 > t1) std::swap(t0, t1);
+
+                cyl_tmin = std::max(ray_t.min, t0);
+                cyl_tmax = std::min(ray_t.max, t1);
+
+                if (cyl_tmin > cyl_tmax) return false;
+            }
 
             // 2. Solve quartic coefficients
             real a, b, c, d, e;
@@ -442,19 +559,25 @@ class ChairSurface : public Quartic {
             std::sort(roots.begin(), roots.end());
 
             const real min_t_epsilon = 0.001;
+            real max_height = scale_k * 1.05;
 
             for (real root : roots) {
-                // Ensure root is within the valid cylinder interval and ray bounds
-                if (root > min_t_epsilon && root >= cyl_tmin && root <= cyl_tmax && ray_t.surrounds(root)) {
+                if (root > min_t_epsilon &&
+                    root >= cyl_tmin &&
+                    root <= cyl_tmax &&
+                    ray_t.surrounds(root)) {
+
                     Point3 p = r.at(root);
-                    
+
                     // Final height check on z
                     if (std::abs(p.z() - center.z()) <= max_height) {
                         rec.t = root;
                         rec.p = p;
+
                         Vec3 outward_normal = compute_normal(p);
                         rec.set_face_normal(r, outward_normal);
                         rec.mat = mat;
+
                         return true;
                     }
                 }
