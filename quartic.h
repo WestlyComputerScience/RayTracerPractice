@@ -634,4 +634,111 @@ class ChairSurface : public Quartic {
         }
 };
 
+class KummerSurface : public Quartic {
+    private:
+        Point3 center;
+        real lambda;
+        real scale;
+
+        int solve_quartic(real a, real b, real c, real d, real e, std::vector<real>& roots) const override {
+            return solve_polynomial_degree_4(a, b, c, d, e, roots);
+        }
+
+        bool solve_coefficients(const Ray& r, real& a, real& b, real& c, real& d, real& e) const override {
+            // Transform ray origin to local surface coordinates scaled by 'scale'
+            Point3 oc = (r.origin() - center) / scale;
+            Vec3 dir = r.direction() / scale;
+
+            real ox = oc.x(), oy = oc.y(), oz = oc.z();
+            real dx = dir.x(), dy = dir.y(), dz = dir.z();
+
+            // Direct powers and cross-products for origin
+            real ox2 = ox * ox, oy2 = oy * oy, oz2 = oz * oz;
+            real dx2 = dx * dx, dy2 = dy * dy, dz2 = dz * dz;
+
+            real ox_dx = ox * dx, oy_dy = oy * dy, oz_dz = oz * dz;
+
+            // Expand: (x^2 + y^2 + z^2)^2 - 4(x^2 y^2 + y^2 z^2 + z^2 x^2) - lambda*(x^2 + y^2 + z^2 - 1) + 1 = 0
+            //
+            // Let S(t) = ||oc + t*dir||^2 = S2*t^2 + S1*t + S0
+            real S2 = dx2 + dy2 + dz2;
+            real S1 = 2.0 * (ox_dx + oy_dy + oz_dz);
+            real S0 = ox2 + oy2 + oz2;
+
+            // Let C(t) = x^2 y^2 + y^2 z^2 + z^2 x^2 = C4*t^4 + C3*t^3 + C2*t^2 + C1*t + C0
+            real C4 = dx2 * dy2 + dy2 * dz2 + dz2 * dx2;
+
+            real C3 = 2.0 * (ox_dx * (dy2 + dz2) +
+                             oy_dy * (dx2 + dz2) +
+                             oz_dz * (dx2 + dy2));
+
+            real C2 = ox2 * (dy2 + dz2) + oy2 * (dx2 + dz2) + oz2 * (dx2 + dy2) +
+                      4.0 * (ox_dx * oy_dy + oy_dy * oz_dz + oz_dz * ox_dx);
+
+            real C1 = 2.0 * (ox_dx * (oy2 + oz2) +
+                             oy_dy * (ox2 + oz2) +
+                             oz_dz * (ox2 + oy2));
+
+            real C0 = ox2 * oy2 + oy2 * oz2 + oz2 * ox2;
+
+            // Substitute S(t) and C(t) into: P(t) = S(t)^2 - 4*C(t) - lambda*(S(t) - 1) + 1
+            a = S2 * S2 - 4.0 * C4;
+            b = 2.0 * S2 * S1 - 4.0 * C3;
+            c = S1 * S1 + 2.0 * S2 * S0 - 4.0 * C2 - lambda * S2;
+            d = 2.0 * S1 * S0 - 4.0 * C1 - lambda * S1;
+            e = S0 * S0 - 4.0 * C0 - lambda * (S0 - 1.0) + 1.0;
+
+            return true;
+        }
+
+        bool clipping_check(const Point3& p, real t) const override {
+            Point3 local_p = (p - center) / scale;
+            // Bound to the active region of the Kummer surface
+            real max_bound = 2.2;
+            return std::abs(local_p.x()) <= max_bound &&
+                   std::abs(local_p.y()) <= max_bound &&
+                   std::abs(local_p.z()) <= max_bound;
+        }
+
+        Vec3 compute_normal(const Point3& p) const override {
+            Point3 local_p = (p - center) / scale;
+
+            real x = local_p.x();
+            real y = local_p.y();
+            real z = local_p.z();
+
+            real x2 = x * x, y2 = y * y, z2 = z * z;
+
+            // Gradient: nabla F(x, y, z)
+            real nx = 4.0 * x * (x2 - y2 - z2) - 2.0 * lambda * x;
+            real ny = 4.0 * y * (y2 - x2 - z2) - 2.0 * lambda * y;
+            real nz = 4.0 * z * (z2 - x2 - y2) - 2.0 * lambda * z;
+
+            Vec3 normal(nx, ny, nz);
+            if (normal.length_squared() < 1e-12) {
+                return Vec3(0.0, 0.0, 1.0);
+            }
+            return unit_vector(normal);
+        }
+
+        real evaluate_implicit(const Point3& p) const override {
+            Point3 local_p = (p - center) / scale;
+            real x = local_p.x(), y = local_p.y(), z = local_p.z();
+
+            real x2 = x * x, y2 = y * y, z2 = z * z;
+            real x4 = x2 * x2, y4 = y2 * y2, z4 = z2 * z2;
+            real sum_sq = x2 + y2 + z2;
+
+            return x4 + y4 + z4 + 1.0 - lambda * (sum_sq - 1.0) - 2.0 * (x2 * y2 + y2 * z2 + z2 * x2);
+        }
+
+    public:
+        KummerSurface(const Point3& center, real lambda, real scale, shared_ptr<Material> mat)
+            : Quartic(mat), center(center), lambda(lambda), scale(scale) {
+            
+            real ext = scale * 2.2;
+            bbox = Aabb(center - Vec3(ext, ext, ext), center + Vec3(ext, ext, ext));
+        }
+};
+
 #endif

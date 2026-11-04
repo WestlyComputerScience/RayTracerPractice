@@ -122,40 +122,43 @@ class Camera {
         * Evaluates incoming radiance for a ray through recursive path tracing.
         */
         Color ray_color(const Ray& r, int depth, const Hittable& world, const Hittable& lights) const {
-            if (depth <= 0) return Color (0, 0, 0);
+            if (depth <= 0) return Color(0, 0, 0);
 
+            // Returns black if no intersection
             HitRecord rec;
             if (!world.hit(r, Interval(0.001, infinity), rec)) {
                 Vec3 unit_dir = unit_vector(r.direction());
                 return skybox.sample(unit_dir);
             }
 
+            // Samples light emissions from emissive materials
             ScatterRecord srec;
             Color color_from_emission = rec.mat->emitted(r, rec, rec.u, rec.v, rec.p);
 
-            if (!rec.mat->scatter(r, rec, srec)) return color_from_emission;
+            // If the ray is absorbed or non-scattering, returns the color from emission
+            if (!rec.mat->scatter(r, rec, srec))
+                return color_from_emission;
 
+            // Skip PDFs for specular-like materials
             if (srec.skip_pdf) {
-                // Offset skip_pdf ray origin as well
-                Point3 offset_origin = rec.p + rec.normal * 1e-3;
-                Ray offset_skip_ray(offset_origin, srec.skip_pdf_ray.direction(), srec.skip_pdf_ray.time());
-                return srec.attenuation * ray_color(offset_skip_ray, depth - 1, world, lights);
+                return srec.attenuation * ray_color(srec.skip_pdf_ray, depth - 1, world, lights);
             }
 
             shared_ptr<Pdf> light_ptr = make_shared<HittablePdf>(lights, rec.p);
             MixturePdf p(light_ptr, srec.pdf_ptr);
 
-            // --- FIX: Offset ray origin slightly along the normal to prevent self-shadowing/gray artifacts ---
-            Point3 offset_origin = rec.p + rec.normal * 1e-3;
-            Ray scattered = Ray(offset_origin, p.generate(), r.time());
-            
+            Ray scattered = Ray(rec.p, p.generate(), r.time());
+
             real pdf_value = p.value(scattered.direction());
+
             real scattering_pdf = rec.mat->scattering_pdf(r, rec, scattered);
 
             Color sample_color = ray_color(scattered, depth - 1, world, lights);
-            Color color_from_scatter = (srec.attenuation * scattering_pdf * sample_color) / pdf_value;
-            
-            return color_from_emission + color_from_scatter;
+
+            real pdf_ratio = scattering_pdf / pdf_value;
+
+            return color_from_emission +
+                srec.attenuation * pdf_ratio * sample_color;
         }
 
     public:

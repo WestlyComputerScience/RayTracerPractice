@@ -608,6 +608,9 @@ void quadrics_cornell_box() {
     shared_ptr<Hittable> chairSurface = make_shared<ChairSurface>(Point3(100, 400, 100), 1.0, 1.0, 60, red);
     world.add(chairSurface);
 
+    shared_ptr<Hittable> kummerSurface = make_shared<KummerSurface>(Point3(400, 400, 100), 1.3, 40.0, red);
+    world.add(kummerSurface);
+
     shared_ptr<Material> empty_material = shared_ptr<Material>();
     HittableList lights;
     lights.add(make_shared<Quad>(Point3(343, 554, 332), Vec3(-130, 0, 0), Vec3(0, 0, -105), empty_material));
