@@ -605,11 +605,17 @@ void quadrics_cornell_box() {
     shared_ptr<Hittable> bohemianDome = make_shared<BohemianDome>(Point3(400, 300, 400), 40, red);
     world.add(bohemianDome);
 
-    shared_ptr<Hittable> chairSurface = make_shared<ChairSurface>(Point3(100, 400, 100), 1.0, 1.0, 60, red);
+    shared_ptr<Hittable> chairSurface = make_shared<ChairSurface>(Point3(100, 400, 100), 1.0, 1.0, 40, red);
     world.add(chairSurface);
 
-    shared_ptr<Hittable> kummerSurface = make_shared<KummerSurface>(Point3(400, 400, 100), 1.3, 40.0, red);
+    shared_ptr<Hittable> kummerSurface = make_shared<KummerSurface>(Point3(400, 400, 100), 1.3, 20.0, red);
     world.add(kummerSurface);
+
+    shared_ptr<Hittable> romanSurface = make_shared<RomanSurface>(Point3(400, 200, 100), 60, red);
+    world.add(romanSurface);
+
+    shared_ptr<Hittable> goursatSurface = make_shared<GoursatSurface>(Point3(380, 150, 250), 70.0, -0.04, 0.0, -1.0, red);
+    world.add(goursatSurface);
 
     shared_ptr<Material> empty_material = shared_ptr<Material>();
     HittableList lights;

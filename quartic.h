@@ -741,4 +741,228 @@ class KummerSurface : public Quartic {
         }
 };
 
+class RomanSurface : public Quartic {
+    private:
+        Point3 center;
+        real scale;
+        real shape_mu;
+
+        int solve_quartic(real a, real b, real c, real d, real e, std::vector<real>& roots) const override {
+            return solve_polynomial_degree_4(a, b, c, d, e, roots);
+        }
+
+        bool solve_coefficients(const Ray& r, real& a, real& b, real& c, real& d, real& e) const override {
+            Point3 oc = (r.origin() - center) / scale;
+            Vec3 dir = r.direction() / scale;
+
+            real ox = oc.x();
+            real oy = oc.y();
+            real oz = oc.z();
+
+            real dx = dir.x();
+            real dy = dir.y();
+            real dz = dir.z();
+
+            real ox2 = ox * ox;
+            real oy2 = oy * oy;
+            real oz2 = oz * oz;
+
+            real dx2 = dx * dx;
+            real dy2 = dy * dy;
+            real dz2 = dz * dz;
+
+            real ox_dx = ox * dx;
+            real oy_dy = oy * dy;
+            real oz_dz = oz * dz;
+
+            real c4 = dx2 * dy2 + dy2 * dz2 + dz2 * dx2;
+            real c3 = 2.0 * (ox_dx * (dy2 + dz2) + oy_dy * (dx2 + dz2) + oz_dz * (dx2 + dy2));
+            real c2 = ox2 * (dy2 + dz2) + oy2 * (dx2 + dz2) + oz2 * (dx2 + dy2) + 4.0 * (ox_dx * oy_dy + oy_dy * oz_dz + oz_dz * ox_dx);
+            real c1 = 2.0 * (ox_dx * (oy2 + oz2) + oy_dy * (ox2 + oz2) + oz_dz * (ox2 + oy2));
+            real c0 = ox2 * oy2 + oy2 * oz2 + oz2 * ox2;
+
+            real l3 = dx * dy * dz;
+            real l2 = ox * dy * dz + oy * dx * dz + oz * dx * dy;
+            real l1 = ox * oy * dz + ox * oz * dy + oy * oz * dx;
+            real l0 = ox * oy * oz;
+            
+            a = c4;
+            b = c3 - shape_mu * l3;
+            c = c2 - shape_mu * l2;
+            d = c1 - shape_mu * l1;
+            e = c0 - shape_mu * l0;
+
+            return true;
+        }
+
+        bool clipping_check(const Point3& p, real t) const override {
+            Point3 local_p = (p - center) / scale;
+
+            real max_bound = 1.05;
+            return std::abs(local_p.x()) <= max_bound &&
+                   std::abs(local_p.y()) <= max_bound && 
+                   std::abs(local_p.z()) <= max_bound;
+        }
+
+        Vec3 compute_normal(const Point3& p) const override {
+            Point3 local_p = (p - center) / scale;
+
+            real x = local_p.x();
+            real y = local_p.y();
+            real z = local_p.z();
+
+            real x2 = x * x;
+            real y2 = y * y;
+            real z2 = z * z;
+
+            real nx = 2.0 * x * (y2 + z2) - shape_mu * y * z;
+            real ny = 2.0 * y * (x2 + z2) - shape_mu * x * z;
+            real nz = 2.0 * z * (x2 + y2) - shape_mu * x * y;
+
+            Vec3 normal(nx, ny, nz);
+            if (normal.length_squared() < 1e-12) {
+                return Vec3(0.0, 0.0, 1.0);
+            }
+            return unit_vector(normal);
+        }
+
+        real evaluate_implicit(const Point3& p) const override {
+            Point3 local_p = (p - center) / scale;
+
+            real x = local_p.x();
+            real y = local_p.y();
+            real z = local_p.z();
+
+            real x2 = x * x;
+            real y2 = y * y;
+            real z2 = z * z;
+
+            return (x2 * y2 + y2 * z2 + z2 * x2) - shape_mu * (x * y * z);
+        }
+
+    public:
+        RomanSurface(const Point3& center, real scale, shared_ptr<Material> mat, real shape_mu = 1.0) : Quartic(mat), center(center), scale(scale), shape_mu(shape_mu) {
+            real ext = scale * 1.5;
+            bbox = Aabb(center - Vec3(ext, ext, ext), center + Vec3(ext, ext, ext));
+        }
+};
+
+class GoursatSurface : public Quartic {
+    private:
+        Point3 center;
+        real scale;
+        real param_a;
+        real param_b;
+        real param_c;
+
+        int solve_quartic(real a, real b, real c, real d, real e, std::vector<real>& roots) const override {
+            return solve_polynomial_degree_4(a, b, c, d, e, roots);
+        }
+
+        bool solve_coefficients(const Ray& r, real& a, real& b, real& c, real& d, real& e) const override {
+            Point3 oc = (r.origin() - center) / scale;
+            Vec3 dir = r.direction() / scale;
+
+            real ox = oc.x();
+            real oy = oc.y();
+            real oz = oc.z();
+            
+            real dx = dir.x();
+            real dy = dir.y();
+            real dz = dir.z();
+
+            real ox2 = ox * ox;
+            real oy2 = oy * oy;
+            real oz2 = oz * oz;
+            
+            real dx2 = dx * dx;
+            real dy2 = dy * dy;
+            real dz2 = dz * dz;
+
+            real ox_dx = ox * dx;
+            real oy_dy = oy * dy;
+            real oz_dz = oz * dz;
+
+            real dx4 = dx2 * dx2;
+            real dy4 = dy2 * dy2;
+            real dz4 = dz2 * dz2;
+            
+            real ox4 = ox2 * ox2;
+            real oy4 = oy2 * oy2;
+            real oz4 = oz2 * oz2;
+            
+            real F4_4 = dx4 + dy4 + dz4;
+            real F4_3 = 4.0 * (ox * dx * dx2 + oy * dy * dy2 + oz * dz * dz2);
+            real F4_2 = 6.0 * (ox2 * dx2 + oy2 * dy2 + oz2 * dz2);
+            real F4_1 = 4.0 * (ox2 * ox * dx + oy2 * oy * dy + oz2 * oz * dz);
+            real F4_0 = ox4 + oy4 + oz4;
+
+            real S2 = dx2 + dy2 + dz2;
+            real S1 = 2.0 * (ox_dx + oy_dy + oz_dz);
+            real S0 = ox2 + oy2 + oz2;
+
+            real S2_sq = S2 * S2;
+            real S1_sq = S1 * S1;
+            real S0_sq = S0 * S0;
+
+            a = F4_4 + param_a * S2_sq;
+            b = F4_3 + param_a * (2.0 * S2 * S1) + param_b * S2;
+            c = F4_2 + param_a * (S1_sq + 2.0 * S2 * S0) + param_b * S1;
+            d = F4_1 + param_a * (2.0 * S1 * S0) + param_b * S0;
+            e = F4_0 + param_a * S0_sq + param_b * S0 + param_c;
+
+            return true;
+        }
+
+        bool clipping_check(const Point3& p, real t) const override {
+            Point3 local_p = (p - center) / scale;
+
+            real max_bound = 2.0;
+            return std::abs(local_p.x()) <= max_bound &&
+                   std::abs(local_p.y()) <= max_bound &&
+                   std::abs(local_p.z()) <= max_bound;
+        }
+
+        Vec3 compute_normal(const Point3& p) const override {
+            Point3 local_p = (p - center) / scale;
+
+            real x = local_p.x();
+            real y = local_p.y();
+            real z = local_p.z();
+
+            real x2 = x * x, y2 = y * y, z2 = z * z;
+            real sum_sq = x2 + y2 + z2;
+
+            real factor = 4.0 * param_a * sum_sq + 2.0 * param_b;
+
+            real nx = 4.0 * (x * x2) + x * factor;
+            real ny = 4.0 * (y * y2) + y * factor;
+            real nz = 4.0 * (z * z2) + z * factor;
+
+            Vec3 normal(nx, ny, nz);
+            if (normal.length_squared() < 1e-12) {
+                return Vec3(0.0, 0.0, 1.0);
+            }
+            return unit_vector(normal);
+        }
+
+        real evaluate_implicit(const Point3& p) const override {
+            Point3 local_p = (p - center) / scale;
+            real x = local_p.x(), y = local_p.y(), z = local_p.z();
+
+            real x2 = x * x, y2 = y * y, z2 = z * z;
+            real sum_sq = x2 + y2 + z2;
+
+            return (x2 * x2 + y2 * y2 + z2 * z2) + param_a * (sum_sq * sum_sq) + param_b * sum_sq + param_c;
+        }
+
+    public:
+        GoursatSurface(const Point3& center, real scale, real param_a, real param_b, real param_c, shared_ptr<Material> mat)
+            : Quartic(mat), center(center), scale(scale), param_a(param_a), param_b(param_b), param_c(param_c) {
+            
+            real ext = scale * 2.0;
+            bbox = Aabb(center - Vec3(ext, ext, ext), center + Vec3(ext, ext, ext));
+        }
+};
+
 #endif
