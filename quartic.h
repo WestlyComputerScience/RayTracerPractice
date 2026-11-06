@@ -965,4 +965,78 @@ class GoursatSurface : public Quartic {
         }
 };
 
+class TangleCube : public Quartic {
+    private:
+        Point3 center;
+        real scale;
+
+        int solve_quartic(real a, real b, real c, real d, real e, std::vector<real>& roots) const override {
+            return solve_polynomial_degree_4(a, b, c, d, e, roots);
+        }
+
+        bool solve_coefficients(const Ray& r, real& a, real& b, real& c, real& d, real& e) const override {
+            Point3 oc = (r.origin() - center) / scale;
+            Vec3 dir = r.direction() / scale;
+
+            real ox = oc.x(), oy = oc.y(), oz = oc.z();
+            real dx = dir.x(), dy = dir.y(), dz = dir.z();
+
+            real ox2 = ox * ox, oy2 = oy * oy, oz2 = oz * oz;
+            real dx2 = dx * dx, dy2 = dy * dy, dz2 = dz * dz;
+
+            real dx4 = dx2 * dx2, dy4 = dy2 * dy2, dz4 = dz2 * dz2;
+            real ox4 = ox2 * ox2, oy4 = oy2 * oy2, oz4 = oz2 * oz2;
+
+            real ox3 = ox2 * ox, oy3 = oy2 * oy, oz3 = oz2 * oz;
+            real dx3 = dx2 * dx, dy3 = dy2 * dy, dz3 = dz2 * dz;
+
+            a = dx4 + dy4 + dz4;
+            b = 4.0 * (ox * dx3 + oy * dy3 + oz * dz3);
+            c = 6.0 * (ox2 * dx2 + oy2 * dy2 + oz2 * dz2) - 5.0 * (dx2 + dy2 + dz2);
+            d = 4.0 * (ox3 * dx + oy3 * dy + oz3 * dz) - 10.0 * (ox * dx + oy * dy + oz * dz);
+            e = (ox4 - 5.0 * ox2) + (oy4 - 5.0 * oy2) + (oz4 - 5.0 * oz2) + 11.8;
+
+            return true;
+        }
+
+        bool clipping_check(const Point3& p, real t) const override {
+            Point3 local_p = (p - center) / scale;
+            real max_bound = 2.5;
+            return std::abs(local_p.x()) <= max_bound &&
+                   std::abs(local_p.y()) <= max_bound &&
+                   std::abs(local_p.z()) <= max_bound;
+        }
+
+        Vec3 compute_normal(const Point3& p) const override {
+            Point3 local_p = (p - center) / scale;
+            real x = local_p.x(), y = local_p.y(), z = local_p.z();
+
+            real x2 = x * x, y2 = y * y, z2 = z * z;
+
+            real nx = 2.0 * x * (2.0 * x2 - 5.0);
+            real ny = 2.0 * y * (2.0 * y2 - 5.0);
+            real nz = 2.0 * z * (2.0 * z2 - 5.0);
+
+            Vec3 normal(nx, ny, nz);
+            if (normal.length_squared() < 1e-12) {
+                return Vec3(0.0, 0.0, 1.0);
+            }
+            return unit_vector(normal);
+        }
+
+        real evaluate_implicit(const Point3& p) const override {
+            Point3 local_p = (p - center) / scale;
+            real x = local_p.x(), y = local_p.y(), z = local_p.z();
+            real x2 = x * x, y2 = y * y, z2 = z * z;
+            return (x2 * x2 - 5.0 * x2) + (y2 * y2 - 5.0 * y2) + (z2 * z2 - 5.0 * z2) + 11.8;
+        }
+
+    public:
+        TangleCube(const Point3& center, real scale, shared_ptr<Material> mat)
+            : Quartic(mat), center(center), scale(scale) {
+            real ext = scale * 2.2;
+            bbox = Aabb(center - Vec3(ext, ext, ext), center + Vec3(ext, ext, ext));
+        }
+};
+
 #endif

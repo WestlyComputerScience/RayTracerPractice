@@ -617,6 +617,9 @@ void quadrics_cornell_box() {
     shared_ptr<Hittable> goursatSurface = make_shared<GoursatSurface>(Point3(380, 150, 250), 70.0, -0.04, 0.0, -1.0, red);
     world.add(goursatSurface);
 
+    shared_ptr<Hittable> tangleCube = make_shared<TangleCube>(Point3(200, 400, 400), 30, red);
+    world.add(tangleCube);
+
     shared_ptr<Material> empty_material = shared_ptr<Material>();
     HittableList lights;
     lights.add(make_shared<Quad>(Point3(343, 554, 332), Vec3(-130, 0, 0), Vec3(0, 0, -105), empty_material));
