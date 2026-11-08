@@ -236,14 +236,19 @@ void cornell_box() {
     world.add(make_shared<Quad>(Point3(555,555,555), Vec3(-555,0,0), Vec3(0,0,-555), white));
     world.add(make_shared<Quad>(Point3(0,0,555), Vec3(555,0,0), Vec3(0,555,0), white));
 
-    shared_ptr<Material> aluminum = make_shared<Metal>(Color(0.8, 0.85, 0.88), 0.0);
-    shared_ptr<Hittable> box1 = box(Point3(0,0,0), Point3(165,330,165), aluminum);
+    // shared_ptr<Material> aluminum = make_shared<Metal>(Color(0.8, 0.85, 0.88), 0.0);
+    // shared_ptr<Hittable> box1 = box(Point3(0,0,0), Point3(165,330,165), aluminum);
+    shared_ptr<Material> ggx_metal = make_shared<GGXMaterial>(Color(0.8, 0.85, 0.88), 0.2, 1.0);
+    shared_ptr<Hittable> box1 = box(Point3(0,0,0), Point3(165,330,165), ggx_metal);
     box1 = make_shared<RotateY>(box1, 15);
     box1 = make_shared<Translate>(box1, Vec3(265, 0, 295));
     world.add(box1);
 
-    shared_ptr<Material> glass = make_shared<Dielectric>(1.5);
-    world.add(make_shared<Sphere>(Point3(190, 90, 190), 90, glass));
+    // shared_ptr<Material> glass = make_shared<Dielectric>(1.5);
+    // world.add(make_shared<Sphere>(Point3(190, 90, 190), 90, glass));
+
+    shared_ptr<Material> shiny_plastic = make_shared<GGXMaterial>(Color(0.1, 0.3, 0.8), 0.05, 0.0);
+    world.add(make_shared<Sphere>(Point3(190, 90, 190), 90, shiny_plastic));
 
     // shared_ptr<Hittable> box2 = box(Point3(0, 0, 0), Point3(165, 165, 165), white);
     // box2 = make_shared<RotateY>(box2, -18);
@@ -650,7 +655,7 @@ void test_wavelength(int wavelength, const CIE1931& cie) { Spectrum spectrum; in
 int main() {
     // CIE1931 cie; test_wavelength(450, cie); test_wavelength(550, cie); test_wavelength(650, cie);
 
-    switch (16) {
+    switch (10) {
         case 1: bouncing_spheres(); break;
         case 2: checkered_spheres(); break;
         case 3: moon(); break;
