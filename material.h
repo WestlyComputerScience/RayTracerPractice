@@ -205,135 +205,288 @@ class Isotropic : public Material {
         real scattering_pdf(const Ray& r_in, const HitRecord& rec, const Ray& scattered) const override { return 1 / (4 * pi); }
 };
 
-inline Vec3 sample_ggx_visible_normal(real roughness, real r1, real r2) {
-    real alpha2 = roughness * roughness;
+inline Vec3 sample_ggx_vndf(
+    const Vec3& view_local,
+    real roughness,
+    real r1,
+    real r2
+) {
+    real alpha = roughness * roughness;
 
-    // get spherical coords based on GGX distribution
-    real phi = 2.0 * pi * r1;
-    real cos_theta = std::sqrt((1.0 - r2) / (1.0 + (alpha2 - 1.0) * r2));
-    real sin_theta = std::sqrt(std::max(0.0, 1.0 - cos_theta * cos_theta));
+    // Stretch the view direction.
+    Vec3 v = unit_vector(Vec3(
+        alpha * view_local.x(),
+        alpha * view_local.y(),
+        view_local.z()
+    ));
 
-    // convert spherical coords to cartesian (in tangent space)
-    real x = sin_theta * std::cos(phi);
-    real y = sin_theta * std::sin(phi);
-    real z = cos_theta;
+    // Construct an orthonormal basis around the stretched view.
+    real lensq = v.x() * v.x() + v.y() * v.y();
 
-    return Vec3(x, y, z);
+    Vec3 t1 = lensq > 1e-8
+        ? Vec3(-v.y(), v.x(), 0.0) / std::sqrt(lensq)
+        : Vec3(1, 0, 0);
+
+    Vec3 t2 = cross(v, t1);
+
+    // Sample a point on the projected disk.
+    real radius = std::sqrt(r1);
+    real phi = 2.0 * pi * r2;
+
+    real p1 = radius * std::cos(phi);
+    real p2 = radius * std::sin(phi);
+
+    // Warp the second coordinate.
+    real s = 0.5 * (1.0 + v.z());
+
+    p2 = (1.0 - s) *
+         std::sqrt(std::max(0.0, 1.0 - p1 * p1))
+         + s * p2;
+
+    // Reconstruct the visible normal.
+    real p3 = std::sqrt(
+        std::max(0.0, 1.0 - p1 * p1 - p2 * p2)
+    );
+
+    Vec3 normal = t1 * p1 + t2 * p2 + v * p3;
+
+    // Unstretch the normal.
+    return unit_vector(Vec3(
+        alpha * normal.x(),
+        alpha * normal.y(),
+        std::max(0.0, normal.z())
+    ));
 }
 
 /**
- * Implementation of a Cook-Torrance PBR material using the GGX microfacet distribution.
+ * Implementation of a Cook-Torrance PBR material
+ * using the GGX microfacet distribution.
  */
 class GGXMaterial : public Material {
-    private:
-        shared_ptr<Texture> albedo;
-        real roughness;
-        real metalness; // 0.0 = non-metal while 1.0 = pure metal
+private:
+    shared_ptr<Texture> albedo;
+    real roughness;
+    real metalness;
 
-        Color fresnel_schlick(real cos_theta, const Color& f0) const {
-            real t = std::pow(std::clamp(1.0 - cos_theta, 0.0, 1.0), 5.0);
-            return Color(
-                f0.r() + (1.0 - f0.r()) * t,
-                f0.g() + (1.0 - f0.g()) * t,
-                f0.b() + (1.0 - f0.b()) * t
-            );
-        }
+    Color fresnel_schlick(real cos_theta, const Color& f0) const {
+        real t = std::pow(
+            std::clamp(1.0 - cos_theta, 0.0, 1.0),
+            5.0
+        );
 
-        real distribution_ggx(const Vec3& n, const Vec3& h, real roughness) const {
-            real a2 = roughness * roughness;
-            real n_dot_h = std::max(dot(n, h), 0.0);
-            real n_dot_h_sq = n_dot_h * n_dot_h;
+        return Color(
+            f0.r() + (1.0 - f0.r()) * t,
+            f0.g() + (1.0 - f0.g()) * t,
+            f0.b() + (1.0 - f0.b()) * t
+        );
+    }
 
-            real denom = (n_dot_h_sq * (a2 - 1.0) + 1.0);
-            denom = pi * denom * denom;
+    real distribution_ggx(
+        const Vec3& n,
+        const Vec3& h,
+        real roughness
+    ) const {
+        real alpha = roughness * roughness;
+        real alpha2 = alpha * alpha;
 
-            return a2 / std::max(denom, 1e-8);
-        }
+        real n_dot_h = std::max(dot(n, h), 0.0);
+        real n_dot_h2 = n_dot_h * n_dot_h;
 
-        real geometry_schlick_ggx(real n_dot_v, real roughness) const {
-            real r = (roughness + 1.0);
-            real k = (r * r) / 8.0;
+        real denom = n_dot_h2 * (alpha2 - 1.0) + 1.0;
 
-            real denom = n_dot_v * (1.0 - k) + k;
-            return n_dot_v / std::max(denom, 1e-8);
-        }
+        return alpha2 / (pi * denom * denom);
+    }
 
-        real geometry_smith(const Vec3& n, const Vec3& v, const Vec3& l, real roughness) const {
-            real n_dot_l = std::max(dot(n, l), 0.0);
-            real n_dot_v = std::max(dot(n, v), 0.0);
-            
-            real ggx1 = geometry_schlick_ggx(n_dot_l, roughness);
-            real ggx2 = geometry_schlick_ggx(n_dot_v, roughness);
+    real geometry_smith_g1(
+        real n_dot_v,
+        real roughness
+    ) const {
+        real alpha = roughness * roughness;
+        real alpha2 = alpha * alpha;
 
-            return ggx1 * ggx2;
-        }
-    
-    public:
-        /**
-         * Constructor taking a solid color albedo, roughness, and metalness.
-         */
-        GGXMaterial(const Color& albedo, real roughness, real metalness)
-            : albedo(make_shared<SolidColor>(albedo)), 
-              roughness(std::clamp(roughness, real(0.001), real(1.0))), 
-              metalness(std::clamp(metalness, real(0.0), real(1.0))) {}
+        real denom = n_dot_v + std::sqrt(
+            alpha2 + (1.0 - alpha2) * n_dot_v * n_dot_v
+        );
 
-        /**
-         * Constructor taking a custom texture, roughtness, and metalness.
-         */
-        GGXMaterial(shared_ptr<Texture> tex, real roughness, real metalness)
-            : albedo(tex), 
-              roughness(std::clamp(roughness, real(0.001), real(1.0))), 
-              metalness(std::clamp(metalness, real(0.0), real(1.0))) {}
-            
-        /**
-         * Determines how an incoming ray scatters off the PBR surface.
-         */
-        bool scatter(const Ray& r_in, const HitRecord& rec, ScatterRecord& srec) const override {
-            Color base_color = albedo->value(rec.u, rec.v, rec.p);
-            
-            Color f0 = Color(0.04, 0.04, 0.04) * (1.0 - metalness) + base_color * metalness;
-            real spec_prob = 0.5 + 0.5 * metalness;
-            
-            if (random_real() < spec_prob) {
-                // --- SPECULAR BOUNCE ---
-                Vec3 v = -unit_vector(r_in.direction());
-                
-                real r1 = random_real();
-                real r2 = random_real();
-                Vec3 h_local = sample_ggx_visible_normal(roughness, r1, r2);
-                
-                Vec3 upt = std::abs(rec.normal.z()) < 0.999 ? Vec3(0,0,1) : Vec3(1,0,0);
-                Vec3 tangent = unit_vector(cross(upt, rec.normal));
-                Vec3 bitangent = cross(rec.normal, tangent);
-                Vec3 h = unit_vector(tangent * h_local.x() + bitangent * h_local.y() + rec.normal * h_local.z());
+        return (2.0 * n_dot_v) / std::max(denom, 1e-8);
+    }
 
-                Vec3 scattered_dir = reflect(-v, h);
-                
-                // If it goes below the surface, gently reflect around the normal instead of killing the ray
-                if (dot(scattered_dir, rec.normal) <= 0.0) {
-                    scattered_dir = reflect(scattered_dir, rec.normal);
-                }
+    real geometry_smith(
+        const Vec3& n,
+        const Vec3& v,
+        const Vec3& l,
+        real roughness
+    ) const {
+        real n_dot_v = std::max(dot(n, v), 0.0);
+        real n_dot_l = std::max(dot(n, l), 0.0);
 
-                srec.attenuation = base_color;
-                srec.skip_pdf = true;
-                srec.skip_pdf_ray = Ray(rec.p, scattered_dir, r_in.time());
-                return true;
-            } else {
-                // --- DIFFUSE BOUNCE ---
-                srec.attenuation = base_color * (1.0 - metalness);
-                srec.pdf_ptr = make_shared<CosinePdf>(rec.normal);
-                srec.skip_pdf = false;
-                return true;
-            }
-        }
+        return geometry_smith_g1(n_dot_v, roughness) *
+            geometry_smith_g1(n_dot_l, roughness);
+    }
 
-        /**
-         * Evaluates the combined pdf for the sampled direction.
-         */
-        real scattering_pdf(const Ray& r_in, const HitRecord& rec, const Ray& scattered) const override {
-            real cos_theta = dot(rec.normal, unit_vector(scattered.direction()));
-            return cos_theta < 0 ? 0 : cos_theta / pi;
-        }
+    /**
+     * PDF of the reflected direction when sampling
+     * halfway vectors using the GGX NDF.
+     */
+    real ggx_pdf(
+        const Vec3& n,
+        const Vec3& v,
+        const Vec3& h,
+        real roughness
+    ) const {
+        real n_dot_v = std::max(dot(n, v), 0.0);
+        real n_dot_h = std::max(dot(n, h), 0.0);
+        real v_dot_h = dot(v, h);
+
+        if (n_dot_v <= 1e-8 ||
+            n_dot_h <= 0.0 ||
+            v_dot_h <= 1e-8)
+            return 0.0;
+
+        real D = distribution_ggx(n, h, roughness);
+        real G1 = geometry_smith_g1(n_dot_v, roughness);
+
+        // VNDF halfway-vector PDF transformed to reflected direction.
+        return D * G1 / (4.0 * n_dot_v);
+    }
+
+public:
+    GGXMaterial(
+        const Color& albedo,
+        real roughness,
+        real metalness
+    )
+        : albedo(make_shared<SolidColor>(albedo)),
+          roughness(std::clamp(roughness, real(0.001), real(1.0))),
+          metalness(std::clamp(metalness, real(0.0), real(1.0))) {}
+
+    GGXMaterial(
+        shared_ptr<Texture> tex,
+        real roughness,
+        real metalness
+    )
+        : albedo(tex),
+          roughness(std::clamp(roughness, real(0.001), real(1.0))),
+          metalness(std::clamp(metalness, real(0.0), real(1.0))) {}
+
+    /**
+     * Samples and evaluates the Cook-Torrance GGX
+     * specular BRDF.
+     */
+    bool scatter(
+    const Ray& r_in,
+    const HitRecord& rec,
+    ScatterRecord& srec
+    ) const override {
+
+        Color base_color = albedo->value(rec.u, rec.v, rec.p);
+
+        Color f0 = Color(0.04, 0.04, 0.04) * (1.0 - metalness)
+                + base_color * metalness;
+
+        // Direction towards previous ray vertex.
+        Vec3 v = -unit_vector(r_in.direction());
+
+        real n_dot_v = dot(rec.normal, v);
+
+        if (n_dot_v <= 0.0)
+            return false;
+
+        // Construct tangent space.
+        Vec3 up = std::abs(rec.normal.z()) < 0.999
+            ? Vec3(0, 0, 1)
+            : Vec3(1, 0, 0);
+
+        Vec3 tangent = unit_vector(cross(up, rec.normal));
+        Vec3 bitangent = cross(rec.normal, tangent);
+
+        // Transform view direction into local coordinates.
+        Vec3 view_local(
+            dot(v, tangent),
+            dot(v, bitangent),
+            n_dot_v
+        );
+
+        // Sample a GGX visible normal.
+        Vec3 h_local = sample_ggx_vndf(
+            view_local,
+            roughness,
+            random_real(),
+            random_real()
+        );
+
+        // Transform halfway vector into world space.
+        Vec3 h = unit_vector(
+            tangent * h_local.x() +
+            bitangent * h_local.y() +
+            rec.normal * h_local.z()
+        );
+
+        real v_dot_h = dot(v, h);
+
+        if (v_dot_h <= 1e-8)
+            return false;
+
+        // Reflect incoming direction around halfway vector.
+        Vec3 l = reflect(-v, h);
+
+        real n_dot_l = dot(rec.normal, l);
+
+        if (n_dot_l <= 1e-8)
+            return false;
+
+        real n_dot_h = std::max(dot(rec.normal, h), 0.0);
+
+        if (n_dot_h <= 0.0)
+            return false;
+
+        // Evaluate GGX distribution.
+        real D = distribution_ggx(rec.normal, h, roughness);
+
+        // Evaluate exact Smith geometry.
+        real G = geometry_smith(rec.normal, v, l, roughness);
+
+        // Evaluate Fresnel.
+        Color F = fresnel_schlick(v_dot_h, f0);
+
+        // Cook-Torrance specular BRDF.
+        real denom = 4.0 * n_dot_v * n_dot_l;
+
+        Color specular_brdf =
+            F * (D * G / std::max(denom, 1e-8));
+
+        // Calculate VNDF reflected-direction PDF.
+        real pdf = ggx_pdf(rec.normal, v, h, roughness);
+
+        if (pdf <= 1e-8)
+            return false;
+
+        // Monte Carlo estimator: BRDF * cosine / PDF.
+        srec.attenuation = specular_brdf * (n_dot_l / pdf);
+
+        srec.skip_pdf = true;
+        srec.skip_pdf_ray = Ray(rec.p, l, r_in.time());
+
+        return true;
+    }
+
+    /**
+     * Lambertian PDF retained for interface compatibility.
+     * Not used when skip_pdf is true.
+     */
+    real scattering_pdf(
+        const Ray& r_in,
+        const HitRecord& rec,
+        const Ray& scattered
+    ) const override {
+        real cos_theta = dot(
+            rec.normal,
+            unit_vector(scattered.direction())
+        );
+
+        return cos_theta < 0 ? 0 : cos_theta / pi;
+    }
 };
+
 
 #endif

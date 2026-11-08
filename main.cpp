@@ -238,7 +238,8 @@ void cornell_box() {
 
     // shared_ptr<Material> aluminum = make_shared<Metal>(Color(0.8, 0.85, 0.88), 0.0);
     // shared_ptr<Hittable> box1 = box(Point3(0,0,0), Point3(165,330,165), aluminum);
-    shared_ptr<Material> ggx_metal = make_shared<GGXMaterial>(Color(0.8, 0.85, 0.88), 0.2, 1.0);
+    shared_ptr<Material> ggx_metal =
+    make_shared<GGXMaterial>(Color(0.8, 0.85, 0.88), 0.2, 1.0);
     shared_ptr<Hittable> box1 = box(Point3(0,0,0), Point3(165,330,165), ggx_metal);
     box1 = make_shared<RotateY>(box1, 15);
     box1 = make_shared<Translate>(box1, Vec3(265, 0, 295));
@@ -247,7 +248,7 @@ void cornell_box() {
     // shared_ptr<Material> glass = make_shared<Dielectric>(1.5);
     // world.add(make_shared<Sphere>(Point3(190, 90, 190), 90, glass));
 
-    shared_ptr<Material> shiny_plastic = make_shared<GGXMaterial>(Color(0.1, 0.3, 0.8), 0.05, 0.0);
+    shared_ptr<Material> shiny_plastic = make_shared<Lambertian>(Color(0.1, 0.3, 0.8));
     world.add(make_shared<Sphere>(Point3(190, 90, 190), 90, shiny_plastic));
 
     // shared_ptr<Hittable> box2 = box(Point3(0, 0, 0), Point3(165, 165, 165), white);
@@ -258,13 +259,13 @@ void cornell_box() {
     shared_ptr<Material> empty_material = shared_ptr<Material>();
     HittableList lights;
     lights.add(make_shared<Quad>(Point3(343, 554, 332), Vec3(-130, 0, 0), Vec3(0, 0, -105), empty_material));
-    lights.add(make_shared<Sphere>(Point3(190, 90, 190), 90, empty_material));
+    // lights.add(make_shared<Sphere>(Point3(190, 90, 190), 90, empty_material));
 
     Camera cam;
 
     cam.aspect_ratio = 1.0;
     cam.image_width = 600;
-    cam.samples_per_pixel = 100;
+    cam.samples_per_pixel = 1000;
     cam.max_ray_bounces = 50;
     cam.background = Color(0,0,0);
 
