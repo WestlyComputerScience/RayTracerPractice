@@ -37,6 +37,15 @@ class Material {
         virtual real scattering_pdf(const Ray& r_in, const HitRecord& rec, const Ray& scattered) const {
             return 0;
         }
+
+        virtual Color scattering_value(
+            const Ray& r_in,
+            const HitRecord& rec,
+            const Ray& scattered,
+            const Color& attenuation
+        ) const {
+            return attenuation * scattering_pdf(r_in, rec, scattered);
+        }
 };
 
 /**
@@ -205,59 +214,6 @@ class Isotropic : public Material {
         real scattering_pdf(const Ray& r_in, const HitRecord& rec, const Ray& scattered) const override { return 1 / (4 * pi); }
 };
 
-inline Vec3 sample_ggx_vndf(
-    const Vec3& view_local,
-    real roughness,
-    real r1,
-    real r2
-) {
-    real alpha = roughness * roughness;
-
-    // Stretch the view direction.
-    Vec3 v = unit_vector(Vec3(
-        alpha * view_local.x(),
-        alpha * view_local.y(),
-        view_local.z()
-    ));
-
-    // Construct an orthonormal basis around the stretched view.
-    real lensq = v.x() * v.x() + v.y() * v.y();
-
-    Vec3 t1 = lensq > 1e-8
-        ? Vec3(-v.y(), v.x(), 0.0) / std::sqrt(lensq)
-        : Vec3(1, 0, 0);
-
-    Vec3 t2 = cross(v, t1);
-
-    // Sample a point on the projected disk.
-    real radius = std::sqrt(r1);
-    real phi = 2.0 * pi * r2;
-
-    real p1 = radius * std::cos(phi);
-    real p2 = radius * std::sin(phi);
-
-    // Warp the second coordinate.
-    real s = 0.5 * (1.0 + v.z());
-
-    p2 = (1.0 - s) *
-         std::sqrt(std::max(0.0, 1.0 - p1 * p1))
-         + s * p2;
-
-    // Reconstruct the visible normal.
-    real p3 = std::sqrt(
-        std::max(0.0, 1.0 - p1 * p1 - p2 * p2)
-    );
-
-    Vec3 normal = t1 * p1 + t2 * p2 + v * p3;
-
-    // Unstretch the normal.
-    return unit_vector(Vec3(
-        alpha * normal.x(),
-        alpha * normal.y(),
-        std::max(0.0, normal.z())
-    ));
-}
-
 /**
  * Implementation of a Cook-Torrance PBR material
  * using the GGX microfacet distribution.
@@ -289,7 +245,7 @@ private:
         real alpha = roughness * roughness;
         real alpha2 = alpha * alpha;
 
-        real n_dot_h = std::max(dot(n, h), 0.0);
+        real n_dot_h = std::max(dot(n, h), real(0));
         real n_dot_h2 = n_dot_h * n_dot_h;
 
         real denom = n_dot_h2 * (alpha2 - 1.0) + 1.0;
@@ -308,7 +264,7 @@ private:
             alpha2 + (1.0 - alpha2) * n_dot_v * n_dot_v
         );
 
-        return (2.0 * n_dot_v) / std::max(denom, 1e-8);
+        return (2.0 * n_dot_v) / std::max(denom, real(1e-8));
     }
 
     real geometry_smith(
@@ -317,8 +273,8 @@ private:
         const Vec3& l,
         real roughness
     ) const {
-        real n_dot_v = std::max(dot(n, v), 0.0);
-        real n_dot_l = std::max(dot(n, l), 0.0);
+        real n_dot_v = std::max(dot(n, v), real(0));
+        real n_dot_l = std::max(dot(n, l), real(0));
 
         return geometry_smith_g1(n_dot_v, roughness) *
             geometry_smith_g1(n_dot_l, roughness);
@@ -334,8 +290,8 @@ private:
         const Vec3& h,
         real roughness
     ) const {
-        real n_dot_v = std::max(dot(n, v), 0.0);
-        real n_dot_h = std::max(dot(n, h), 0.0);
+        real n_dot_v = std::max(dot(n, v), real(0));
+        real n_dot_h = std::max(dot(n, h), real(0));
         real v_dot_h = dot(v, h);
 
         if (n_dot_v <= 1e-8 ||
@@ -377,115 +333,78 @@ public:
     const Ray& r_in,
     const HitRecord& rec,
     ScatterRecord& srec
-    ) const override {
+) const override {
 
-        Color base_color = albedo->value(rec.u, rec.v, rec.p);
+    Vec3 v = -unit_vector(r_in.direction());
 
-        Color f0 = Color(0.04, 0.04, 0.04) * (1.0 - metalness)
-                + base_color * metalness;
+    real n_dot_v = dot(rec.normal, v);
 
-        // Direction towards previous ray vertex.
-        Vec3 v = -unit_vector(r_in.direction());
+    if (n_dot_v <= 0.0)
+        return false;
 
-        real n_dot_v = dot(rec.normal, v);
+    // Calculate base reflectivity.
+    Color base_color = albedo->value(rec.u, rec.v, rec.p);
 
-        if (n_dot_v <= 0.0)
-            return false;
+    Color f0(
+        0.04 * (1.0 - metalness) + base_color.r() * metalness,
+        0.04 * (1.0 - metalness) + base_color.g() * metalness,
+        0.04 * (1.0 - metalness) + base_color.b() * metalness
+    );
 
-        // Construct tangent space.
-        Vec3 up = std::abs(rec.normal.z()) < 0.999
-            ? Vec3(0, 0, 1)
-            : Vec3(1, 0, 0);
+    // Store the material parameters for BRDF evaluation.
+    srec.attenuation = f0;
 
-        Vec3 tangent = unit_vector(cross(up, rec.normal));
-        Vec3 bitangent = cross(rec.normal, tangent);
+    // Provide the GGX sampling distribution.
+    srec.pdf_ptr = make_shared<GGXPdf>(
+        rec.normal,
+        v,
+        roughness
+    );
 
-        // Transform view direction into local coordinates.
-        Vec3 view_local(
-            dot(v, tangent),
-            dot(v, bitangent),
-            n_dot_v
-        );
+    srec.skip_pdf = false;
 
-        // Sample a GGX visible normal.
-        Vec3 h_local = sample_ggx_vndf(
-            view_local,
-            roughness,
-            random_real(),
-            random_real()
-        );
+    return true;
+}
 
-        // Transform halfway vector into world space.
-        Vec3 h = unit_vector(
-            tangent * h_local.x() +
-            bitangent * h_local.y() +
-            rec.normal * h_local.z()
-        );
+Color scattering_value(
+    const Ray& r_in,
+    const HitRecord& rec,
+    const Ray& scattered,
+    const Color& attenuation
+) const override {
 
-        real v_dot_h = dot(v, h);
+    Vec3 n = rec.normal;
+    Vec3 v = -unit_vector(r_in.direction());
+    Vec3 l = unit_vector(scattered.direction());
 
-        if (v_dot_h <= 1e-8)
-            return false;
+    real n_dot_v = std::max(dot(n, v), real(0));
+    real n_dot_l = std::max(dot(n, l), real(0));
 
-        // Reflect incoming direction around halfway vector.
-        Vec3 l = reflect(-v, h);
+    if (n_dot_v <= 1e-8 || n_dot_l <= 0.0)
+        return Color(0, 0, 0);
 
-        real n_dot_l = dot(rec.normal, l);
+    Vec3 h = unit_vector(v + l);
 
-        if (n_dot_l <= 1e-8)
-            return false;
+    Color base_color = albedo->value(rec.u, rec.v, rec.p);
 
-        real n_dot_h = std::max(dot(rec.normal, h), 0.0);
+    Color f0(
+        0.04 * (1.0 - metalness) + base_color.r() * metalness,
+        0.04 * (1.0 - metalness) + base_color.g() * metalness,
+        0.04 * (1.0 - metalness) + base_color.b() * metalness
+    );
 
-        if (n_dot_h <= 0.0)
-            return false;
+    Color F = fresnel_schlick(
+        std::max(dot(v, h), real(0)),
+        f0
+    );
 
-        // Evaluate GGX distribution.
-        real D = distribution_ggx(rec.normal, h, roughness);
+    real D = distribution_ggx(n, h, roughness);
+    real G = geometry_smith(n, v, l, roughness);
 
-        // Evaluate exact Smith geometry.
-        real G = geometry_smith(rec.normal, v, l, roughness);
+    real factor = D * G / (4.0 * n_dot_v);
 
-        // Evaluate Fresnel.
-        Color F = fresnel_schlick(v_dot_h, f0);
-
-        // Cook-Torrance specular BRDF.
-        real denom = 4.0 * n_dot_v * n_dot_l;
-
-        Color specular_brdf =
-            F * (D * G / std::max(denom, 1e-8));
-
-        // Calculate VNDF reflected-direction PDF.
-        real pdf = ggx_pdf(rec.normal, v, h, roughness);
-
-        if (pdf <= 1e-8)
-            return false;
-
-        // Monte Carlo estimator: BRDF * cosine / PDF.
-        srec.attenuation = specular_brdf * (n_dot_l / pdf);
-
-        srec.skip_pdf = true;
-        srec.skip_pdf_ray = Ray(rec.p, l, r_in.time());
-
-        return true;
-    }
-
-    /**
-     * Lambertian PDF retained for interface compatibility.
-     * Not used when skip_pdf is true.
-     */
-    real scattering_pdf(
-        const Ray& r_in,
-        const HitRecord& rec,
-        const Ray& scattered
-    ) const override {
-        real cos_theta = dot(
-            rec.normal,
-            unit_vector(scattered.direction())
-        );
-
-        return cos_theta < 0 ? 0 : cos_theta / pi;
-    }
+    return F * factor;
+}
 };
 
 

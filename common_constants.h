@@ -30,8 +30,9 @@ inline real degrees_to_radians(real degrees) {
 }
 
 inline real random_real() {
-    static std::uniform_real_distribution<real> distribution(0.0, 1.0);
-    static std::mt19937 generator;
+    thread_local std::uniform_real_distribution<real> distribution(0.0, 1.0);
+    thread_local std::mt19937 generator(std::random_device{}());
+
     return distribution(generator);
 }
 

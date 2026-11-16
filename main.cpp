@@ -238,8 +238,7 @@ void cornell_box() {
 
     // shared_ptr<Material> aluminum = make_shared<Metal>(Color(0.8, 0.85, 0.88), 0.0);
     // shared_ptr<Hittable> box1 = box(Point3(0,0,0), Point3(165,330,165), aluminum);
-    shared_ptr<Material> ggx_metal =
-    make_shared<GGXMaterial>(Color(0.8, 0.85, 0.88), 0.2, 1.0);
+    shared_ptr<Material> ggx_metal = make_shared<GGXMaterial>(Color(0.8, 0.85, 0.88), 0.5, 1.0);
     shared_ptr<Hittable> box1 = box(Point3(0,0,0), Point3(165,330,165), ggx_metal);
     box1 = make_shared<RotateY>(box1, 15);
     box1 = make_shared<Translate>(box1, Vec3(265, 0, 295));
@@ -265,8 +264,8 @@ void cornell_box() {
 
     cam.aspect_ratio = 1.0;
     cam.image_width = 600;
-    cam.samples_per_pixel = 1000;
-    cam.max_ray_bounces = 50;
+    cam.samples_per_pixel = 100;
+    cam.max_ray_bounces = 3;
     cam.background = Color(0,0,0);
 
     cam.vfov = 40;

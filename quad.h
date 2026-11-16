@@ -95,6 +95,8 @@ class Quad : public Hittable {
             real distance_squared = rec.t * rec.t * direction.length_squared();
             real cosine = std::fabs(dot(direction, rec.normal) / direction.length());
 
+            if (cosine < 1e-8 || area < 1e-8) return 0.0;
+
             return distance_squared / (cosine * area);
         }
         

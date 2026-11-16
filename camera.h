@@ -3,6 +3,7 @@
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "external/stb_image_write.h" // allows hdr images to be written
+#include <iostream>
 
 #include <omp.h>
 #include "hittable.h"
@@ -40,7 +41,8 @@ class Camera {
             sqrt_spp = int(std::sqrt(samples_per_pixel));
             recip_sqrt_spp = 1.0 / sqrt_spp;
 
-            pixel_samples_scale = 1.0 / samples_per_pixel;
+            int actual_samples = sqrt_spp * sqrt_spp;
+            pixel_samples_scale = 1.0 / actual_samples;
 
             center = lookfrom;
 
@@ -124,43 +126,49 @@ class Camera {
         Color ray_color(const Ray& r, int depth, const Hittable& world, const Hittable& lights) const {
             if (depth <= 0) return Color(0, 0, 0);
 
-            // Returns black if no intersection
             HitRecord rec;
-            if (!world.hit(r, Interval(0.001, infinity), rec)) {
-                Vec3 unit_dir = unit_vector(r.direction());
-                return skybox.sample(unit_dir);
-            }
+            if (!world.hit(r, Interval(0.001, infinity), rec))
+                return background;
 
-            // Samples light emissions from emissive materials
             ScatterRecord srec;
             Color color_from_emission = rec.mat->emitted(r, rec, rec.u, rec.v, rec.p);
 
-            // If the ray is absorbed or non-scattering, returns the color from emission
             if (!rec.mat->scatter(r, rec, srec))
                 return color_from_emission;
 
-            // Skip PDFs for specular-like materials
             if (srec.skip_pdf) {
-                return srec.attenuation * ray_color(srec.skip_pdf_ray, depth - 1, world, lights);
+                HitRecord secondary_rec;
+                if (world.hit(srec.skip_pdf_ray, Interval(0.001, infinity), secondary_rec)) {
+                    return secondary_rec.mat->emitted(
+                        srec.skip_pdf_ray,
+                        secondary_rec,
+                        secondary_rec.u,
+                        secondary_rec.v,
+                        secondary_rec.p
+                    );
+                }
+                return background;
             }
 
             shared_ptr<Pdf> light_ptr = make_shared<HittablePdf>(lights, rec.p);
             MixturePdf p(light_ptr, srec.pdf_ptr);
-
-            Ray scattered = Ray(rec.p, p.generate(), r.time());
+            Ray scattered(rec.p, p.generate(), r.time());
 
             real pdf_value = p.value(scattered.direction());
-
-            real scattering_pdf = rec.mat->scattering_pdf(r, rec, scattered);
+            if (pdf_value <= 1e-8)
+                return color_from_emission;
 
             Color sample_color = ray_color(scattered, depth - 1, world, lights);
+            Color scattering_value = rec.mat->scattering_value(
+                r,
+                rec,
+                scattered,
+                srec.attenuation
+            );
 
-            real pdf_ratio = scattering_pdf / pdf_value;
-
-            return color_from_emission +
-                srec.attenuation * pdf_ratio * sample_color;
+            return color_from_emission
+                + scattering_value * (1.0 / pdf_value) * sample_color;
         }
-
     public:
         real aspect_ratio = 1.0; // ratio of image width to height
         int image_width = 100;
