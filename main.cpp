@@ -19,6 +19,7 @@
 #include "spectrum.h"
 #include "quadrics.h"
 #include "quartic.h"
+#include "gpu_scene_builder.h"
 
 /**
 * The main class used to setup ray tracer scenarios.

@@ -44,6 +44,14 @@ class Quad : public Hittable {
 
         Aabb bounding_box() const override { return bbox; }
 
+        const Point3& get_Q() const { return Q; }
+        const Vec3& get_u() const { return u; }
+        const Vec3& get_v() const { return v; }
+        const Vec3& get_normal() const { return normal; }
+        real get_D() const { return D; }
+        real get_area() const { return area; }
+        const shared_ptr<Material>& get_material() const { return mat; }
+
         /**
         * Determines if a ray intersects the quad plane within distance ray_t and
         * lies inside its 2D surface boundary. 
