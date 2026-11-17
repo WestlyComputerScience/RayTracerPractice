@@ -1,6 +1,8 @@
 #ifndef MATERIAL_H
 #define MATERIAL_H
 
+#include <algorithm>
+
 #include "hittable.h"
 #include "pdf.h"
 #include "texture.h"
@@ -65,6 +67,10 @@ class Lambertian : public Material {
         */
         Lambertian(shared_ptr<Texture> tex) : tex(tex) {}
 
+        const shared_ptr<Texture>& get_texture() const {
+            return tex;
+        }
+
         /**
         * Computes the out ray direction and surface color attenuation.
         */
@@ -93,6 +99,14 @@ class Metal : public Material {
         * Takes an albedo to store the RGB reflectance color and a fuzziness factor to blur the reflections.
         */
         Metal(const Color& albedo, real fuzz) : albedo(albedo), fuzz(fuzz < 1 ? fuzz : 1) {}
+
+        const Color& get_albedo() const {
+            return albedo;
+        }
+
+        real get_fuzz() const {
+            return fuzz;
+        }
 
         /**
         * Calculates specular reflection and applies roughness offset to produce outbound rays.
@@ -131,6 +145,10 @@ class Dielectric : public Material {
         * Given an objects IOR, creates a dielectric material.
         */
         Dielectric(real refraction_index) : refraction_index(refraction_index) {}
+
+        real get_refraction_index() const {
+            return refraction_index;
+        }
 
         /**
         * Determines if the incoming ray refracts into/out of the dielectric or if it reflects off the surface boundary.
@@ -174,6 +192,10 @@ class DiffuseLight : public Material {
         * Wraps a solid RGB color into a solid color texture.
         */
         DiffuseLight(const Color& emit) : tex(make_shared<SolidColor>(emit)) {}
+
+        const shared_ptr<Texture>& get_texture() const {
+            return tex;
+        }
 
         /**
         * Calculates the light spectrum and intensity at a given point.

@@ -34,6 +34,10 @@ class SolidColor : public Texture {
         */
         SolidColor(real red, real green, real blue) : SolidColor(Color(red, green, blue)) {}
 
+        const Color& get_albedo() const {
+            return albedo;
+        }
+
         /**
         * Applies a constant RGB value to a point.
         */

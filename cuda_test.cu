@@ -25,6 +25,7 @@ int main() {
     test_kernel<<<1, 10>>>(device_result);
 
     error = cudaGetLastError();
+
     if (error != cudaSuccess) {
         std::cerr << "Kernel launch failed: "
                   << cudaGetErrorString(error) << '\n';
@@ -33,6 +34,7 @@ int main() {
     }
 
     error = cudaDeviceSynchronize();
+
     if (error != cudaSuccess) {
         std::cerr << "Kernel execution failed: "
                   << cudaGetErrorString(error) << '\n';
@@ -54,10 +56,10 @@ int main() {
         return 1;
     }
 
-    std::cout << "GPU calculation results:\n";
+    std::cout << "CUDA kernel results:\n";
 
     for (int i = 0; i < 10; i++) {
-        std::cout << i << "^2 = " << host_result[i] << '\n';
+        std::cout << host_result[i] << '\n';
     }
 
     cudaFree(device_result);
