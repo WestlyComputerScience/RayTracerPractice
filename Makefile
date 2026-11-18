@@ -32,11 +32,14 @@ cuda_test: cuda_test.cu
 gpu_scene.o: gpu_scene.cu gpu_scene.cuh gpu_scene.h
 	$(NVCC) $(NVCCFLAGS) -c gpu_scene.cu -o gpu_scene.o
 
-gpu_upload_test.o: gpu_upload_test.cu gpu_scene.cuh gpu_scene_builder.h
+gpu_upload_test.o: gpu_upload_test.cu gpu_scene.cuh gpu_scene_builder.h gpu_intersection.cuh
 	$(NVCC) $(NVCCFLAGS) -c gpu_upload_test.cu -o gpu_upload_test.o
 
 gpu_upload_test: gpu_upload_test.o gpu_scene.o
 	$(NVCC) $(NVCCFLAGS) gpu_upload_test.o gpu_scene.o -o gpu_upload_test
+
+gpu_intersection_test: gpu_intersection_test.cu
+	$(NVCC) $(NVCCFLAGS) gpu_intersection_test.cu -o gpu_intersection_test
 
 clean:
 	rm -f *.o core westly_ray_tracer cuda_test
