@@ -53,6 +53,7 @@ GPUDeviceScene upload_gpu_scene(const GPUScene& scene) {
     device_scene.bvh_node_count = scene.bvh_nodes.size();
     device_scene.primitive_count = scene.primitives.size();
     device_scene.material_count = scene.materials.size();
+    device_scene.light_count = scene.light_indices.size();
 
     try {
         upload_array(
@@ -68,6 +69,11 @@ GPUDeviceScene upload_gpu_scene(const GPUScene& scene) {
         upload_array(
             device_scene.materials,
             scene.materials
+        );
+
+        upload_array(
+            device_scene.light_indices,
+            scene.light_indices
         );
     }
     catch (...) {
@@ -94,7 +100,13 @@ void free_gpu_scene(GPUDeviceScene& scene) {
         scene.materials = nullptr;
     }
 
+    if (scene.light_indices != nullptr) {
+        cudaFree(scene.light_indices);
+        scene.light_indices = nullptr;
+    }
+
     scene.bvh_node_count = 0;
     scene.primitive_count = 0;
     scene.material_count = 0;
+    scene.light_count = 0;
 }

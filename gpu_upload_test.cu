@@ -118,7 +118,14 @@ void test_gpu_scene_render(const GPUDeviceScene& device_scene) {
     int blocks =
         (pixel_count + threads_per_block - 1) / threads_per_block;
 
-    // Render the uploaded scene using GPU BVH traversal.
+    std::vector<GPUColor> pixels(pixel_count);
+
+    constexpr float tolerance = 1e-5f;
+
+    // ------------------------------------------------------------
+    // Test 1: Render the uploaded scene using flat material colors.
+    // ------------------------------------------------------------
+
     gpu_render_scene<<<blocks, threads_per_block>>>(
         scene_gpu_camera,
         device_scene.bvh_nodes,
@@ -130,17 +137,8 @@ void test_gpu_scene_render(const GPUDeviceScene& device_scene) {
         device_pixels
     );
 
-    check_cuda(
-        cudaGetLastError(),
-        "Launching GPU scene-render kernel"
-    );
-
-    check_cuda(
-        cudaDeviceSynchronize(),
-        "Executing GPU scene-render kernel"
-    );
-
-    std::vector<GPUColor> pixels(pixel_count);
+    check_cuda(cudaGetLastError(), "Launching GPU scene-render kernel");
+    check_cuda(cudaDeviceSynchronize(), "Executing GPU scene-render kernel");
 
     check_cuda(
         cudaMemcpy(
@@ -152,16 +150,12 @@ void test_gpu_scene_render(const GPUDeviceScene& device_scene) {
         "Copying rendered scene pixels"
     );
 
-    cudaFree(device_pixels);
-
-    // Count the different pixel categories.
     int red_pixels = 0;
     int green_pixels = 0;
+    int light_pixels = 0;
     int background_pixels = 0;
     int diagnostic_pixels = 0;
     int unknown_pixels = 0;
-
-    constexpr float tolerance = 1e-5f;
 
     for (const GPUColor& pixel : pixels) {
         bool is_red =
@@ -183,12 +177,20 @@ void test_gpu_scene_render(const GPUDeviceScene& device_scene) {
             std::fabs(pixel.r - 1.0f) < tolerance &&
             std::fabs(pixel.g) < tolerance &&
             std::fabs(pixel.b - 1.0f) < tolerance;
+        
+        bool is_light =
+            std::fabs(pixel.r - 5.0f) < tolerance &&
+            std::fabs(pixel.g - 5.0f) < tolerance &&
+            std::fabs(pixel.b - 5.0f) < tolerance;
 
         if (is_red) {
             red_pixels++;
         }
         else if (is_green) {
             green_pixels++;
+        }
+        else if (is_light) {
+            light_pixels++;
         }
         else if (is_background) {
             background_pixels++;
@@ -204,11 +206,12 @@ void test_gpu_scene_render(const GPUDeviceScene& device_scene) {
     std::cout << "\nGPU scene-rendering results:\n";
     std::cout << "Red pixels: " << red_pixels << '\n';
     std::cout << "Green pixels: " << green_pixels << '\n';
+    std::cout << "Light pixels: " << light_pixels << '\n';
     std::cout << "Background pixels: " << background_pixels << '\n';
     std::cout << "Diagnostic pixels: " << diagnostic_pixels << '\n';
     std::cout << "Unknown pixels: " << unknown_pixels << '\n';
 
-    bool passed =
+    bool scene_passed =
         red_pixels > 0 &&
         green_pixels > 0 &&
         background_pixels > 0 &&
@@ -216,16 +219,214 @@ void test_gpu_scene_render(const GPUDeviceScene& device_scene) {
         unknown_pixels == 0;
 
     std::cout << "GPU scene rendering: "
-              << (passed ? "PASS" : "FAIL")
+              << (scene_passed ? "PASS" : "FAIL")
               << '\n';
 
-    if (!passed) {
-        throw std::runtime_error(
-            "GPU scene-rendering test failed."
-        );
+    if (!scene_passed) {
+        cudaFree(device_pixels);
+        throw std::runtime_error("GPU scene-rendering test failed.");
+    }
+
+    
+    // ------------------------------------------------------------
+    // Test 2: Render the scene using surface normal visualization.
+    // ------------------------------------------------------------
+
+    gpu_render_normals<<<blocks, threads_per_block>>>(
+        scene_gpu_camera,
+        device_scene.bvh_nodes,
+        device_scene.primitives,
+        static_cast<int>(device_scene.bvh_node_count),
+        static_cast<int>(device_scene.primitive_count),
+        device_pixels
+    );
+
+    check_cuda(cudaGetLastError(), "Launching GPU normal-rendering kernel");
+    check_cuda(cudaDeviceSynchronize(), "Executing GPU normal-rendering kernel");
+
+    check_cuda(
+        cudaMemcpy(
+            pixels.data(),
+            device_pixels,
+            pixel_count * sizeof(GPUColor),
+            cudaMemcpyDeviceToHost
+        ),
+        "Copying normal-rendered pixels"
+    );
+
+    int normal_pixels = 0;
+    int light_normal_pixels = 0;
+    background_pixels = 0;
+    diagnostic_pixels = 0;
+    unknown_pixels = 0;
+
+    for (const GPUColor& pixel : pixels) {
+        bool is_normal =
+            std::fabs(pixel.r - 0.5f) < tolerance &&
+            std::fabs(pixel.g - 0.5f) < tolerance &&
+            std::fabs(pixel.b - 1.0f) < tolerance;
+
+        // The light quad has a geometric normal of (0, -1, 0).
+        // Its normal visualization should therefore be (0.5, 0, 0.5).
+        bool is_light_normal =
+            std::fabs(pixel.r - 0.5f) < tolerance &&
+            std::fabs(pixel.g) < tolerance &&
+            std::fabs(pixel.b - 0.5f) < tolerance;
+
+        bool is_background =
+            std::fabs(pixel.r - scene_gpu_camera.background_r) < tolerance &&
+            std::fabs(pixel.g - scene_gpu_camera.background_g) < tolerance &&
+            std::fabs(pixel.b - scene_gpu_camera.background_b) < tolerance;
+
+        bool is_diagnostic =
+            std::fabs(pixel.r - 1.0f) < tolerance &&
+            std::fabs(pixel.g) < tolerance &&
+            std::fabs(pixel.b - 1.0f) < tolerance;
+
+        if (is_normal) {
+            normal_pixels++;
+        }
+        else if (is_light_normal) {
+            light_normal_pixels++;
+        }
+        else if (is_background) {
+            background_pixels++;
+        }
+        else if (is_diagnostic) {
+            diagnostic_pixels++;
+        }
+        else {
+            unknown_pixels++;
+        }
+    }
+
+    std::cout << "\nGPU normal-rendering results:\n";
+    std::cout << "Normal pixels: " << normal_pixels << '\n';
+    std::cout << "Light normal pixels: " << light_normal_pixels << '\n';
+    std::cout << "Background pixels: " << background_pixels << '\n';
+    std::cout << "Diagnostic pixels: " << diagnostic_pixels << '\n';
+    std::cout << "Unknown pixels: " << unknown_pixels << '\n';
+
+    bool normals_passed =
+        normal_pixels > 0 &&
+        light_normal_pixels > 0 &&
+        background_pixels > 0 &&
+        diagnostic_pixels == 0 &&
+        unknown_pixels == 0;
+
+    std::cout << "GPU normal rendering: "
+              << (normals_passed ? "PASS" : "FAIL")
+              << '\n';
+
+    if (!normals_passed) {
+        cudaFree(device_pixels);
+        throw std::runtime_error("GPU normal-rendering test failed.");
+    }
+
+
+    // ------------------------------------------------------------
+    // Test 3: Render the scene using Lambertian diffuse lighting.
+    // ------------------------------------------------------------
+
+    gpu_render_diffuse<<<blocks, threads_per_block>>>(
+        scene_gpu_camera,
+        device_scene.bvh_nodes,
+        device_scene.primitives,
+        device_scene.materials,
+        static_cast<int>(device_scene.bvh_node_count),
+        static_cast<int>(device_scene.primitive_count),
+        static_cast<int>(device_scene.material_count),
+        device_pixels
+    );
+
+    check_cuda(cudaGetLastError(), "Launching GPU diffuse-rendering kernel");
+    check_cuda(cudaDeviceSynchronize(), "Executing GPU diffuse-rendering kernel");
+
+    check_cuda(
+        cudaMemcpy(
+            pixels.data(),
+            device_pixels,
+            pixel_count * sizeof(GPUColor),
+            cudaMemcpyDeviceToHost
+        ),
+        "Copying diffuse-rendered pixels"
+    );
+
+    cudaFree(device_pixels);
+
+    // Expected intensity:
+    // dot((0, 0, -1), (-0.40824829, 0.40824829, -0.81649658))
+    constexpr float expected_diffuse = 0.81649658f;
+
+    int diffuse_red_pixels = 0;
+    int diffuse_green_pixels = 0;
+    background_pixels = 0;
+    diagnostic_pixels = 0;
+    unknown_pixels = 0;
+
+    for (const GPUColor& pixel : pixels) {
+        bool is_diffuse_red =
+            std::fabs(pixel.r - expected_diffuse) < tolerance &&
+            std::fabs(pixel.g) < tolerance &&
+            std::fabs(pixel.b) < tolerance;
+
+        bool is_diffuse_green =
+            std::fabs(pixel.r) < tolerance &&
+            std::fabs(pixel.g - expected_diffuse) < tolerance &&
+            std::fabs(pixel.b) < tolerance;
+
+        bool is_background =
+            std::fabs(pixel.r - scene_gpu_camera.background_r) < tolerance &&
+            std::fabs(pixel.g - scene_gpu_camera.background_g) < tolerance &&
+            std::fabs(pixel.b - scene_gpu_camera.background_b) < tolerance;
+
+        bool is_diagnostic =
+            std::fabs(pixel.r - 1.0f) < tolerance &&
+            std::fabs(pixel.g) < tolerance &&
+            std::fabs(pixel.b - 1.0f) < tolerance;
+
+        if (is_diffuse_red) {
+            diffuse_red_pixels++;
+        }
+        else if (is_diffuse_green) {
+            diffuse_green_pixels++;
+        }
+        else if (is_background) {
+            background_pixels++;
+        }
+        else if (is_diagnostic) {
+            diagnostic_pixels++;
+        }
+        else {
+            unknown_pixels++;
+        }
+    }
+
+    std::cout << "\nGPU diffuse-rendering results:\n";
+    std::cout << "Diffuse red pixels: " << diffuse_red_pixels << '\n';
+    std::cout << "Diffuse green pixels: " << diffuse_green_pixels << '\n';
+    std::cout << "Background pixels: " << background_pixels << '\n';
+    std::cout << "Diagnostic pixels: " << diagnostic_pixels << '\n';
+    std::cout << "Unknown pixels: " << unknown_pixels << '\n';
+
+    std::cout << "Expected diffuse intensity: "
+              << expected_diffuse << '\n';
+
+    bool diffuse_passed =
+        diffuse_red_pixels > 0 &&
+        diffuse_green_pixels > 0 &&
+        background_pixels > 0 &&
+        diagnostic_pixels == 0 &&
+        unknown_pixels == 0;
+
+    std::cout << "GPU diffuse rendering: "
+              << (diffuse_passed ? "PASS" : "FAIL")
+              << '\n';
+
+    if (!diffuse_passed) {
+        throw std::runtime_error("GPU diffuse-rendering test failed.");
     }
 }
-
 
 int main() {
     try {
@@ -524,6 +725,16 @@ int main() {
             green
         ));
 
+        shared_ptr<Material> light =
+        make_shared<DiffuseLight>(Color(5.0, 5.0, 5.0));
+
+    world.add(make_shared<Quad>(
+        Point3(0, 5, 0),
+        Vec3(2, 0, 0),
+        Vec3(0, 0, 2),
+        light
+    ));
+
         // Convert the CPU scene into GPU-compatible records.
         GPUScene cpu_scene = build_gpu_scene_from_list(world);
 
@@ -532,10 +743,10 @@ int main() {
         std::cout << "Primitives: " << cpu_scene.primitives.size() << '\n';
         std::cout << "Materials: " << cpu_scene.materials.size() << '\n';
 
-        // Four primitives should produce three BVH nodes.
-        if (cpu_scene.bvh_nodes.size() != 3) {
+        // Five primitives should produce five BVH nodes.
+        if (cpu_scene.bvh_nodes.size() != 5) {
             throw std::runtime_error(
-                "Expected three BVH nodes for four primitives."
+                "Expected five BVH nodes for five primitives."
             );
         }
 
@@ -543,6 +754,19 @@ int main() {
         GPUDeviceScene device_scene = upload_gpu_scene(cpu_scene);
 
         std::cout << "\nGPU scene:\n";
+
+        std::cout << "Light primitives: "
+                << cpu_scene.light_indices.size() << '\n';
+
+        for (size_t i = 0; i < cpu_scene.light_indices.size(); ++i) {
+            std::cout << "Light " << i
+                    << " -> primitive "
+                    << cpu_scene.light_indices[i] << '\n';
+        }
+
+        std::cout << "Uploaded light count: "
+                << device_scene.light_count << '\n';
+
         std::cout << "BVH nodes: " << device_scene.bvh_node_count << '\n';
         std::cout << "Primitives: " << device_scene.primitive_count << '\n';
         std::cout << "Materials: " << device_scene.material_count << '\n';

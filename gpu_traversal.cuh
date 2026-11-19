@@ -7,9 +7,20 @@
 
 struct GPUTraversalResult {
     float t;
+
     int primitive_index;
     int hit;
     int stack_overflow;
+
+    // World-space hit position.
+    float position_x;
+    float position_y;
+    float position_z;
+
+    // Surface normal.
+    float normal_x;
+    float normal_y;
+    float normal_z;
 };
 
 constexpr int GPU_BVH_STACK_SIZE = 64;
@@ -20,7 +31,10 @@ __device__ bool gpu_quad_hit(
     const GPURay& ray,
     float ray_t_min,
     float ray_t_max,
-    float& hit_t
+    float& hit_t,
+    float& hit_x,
+    float& hit_y,
+    float& hit_z
 ) {
     const float qx = primitive.parameters[0];
     const float qy = primitive.parameters[1];
@@ -109,6 +123,11 @@ __device__ bool gpu_quad_hit(
     }
 
     hit_t = t;
+
+    hit_x = px;
+    hit_y = py;
+    hit_z = pz;
+
     return true;
 }
 
@@ -123,6 +142,7 @@ __device__ GPUTraversalResult gpu_bvh_hit(
     float ray_t_max
 ) {
     GPUTraversalResult result{};
+
     result.t = ray_t_max;
     result.primitive_index = -1;
     result.hit = 0;
@@ -172,17 +192,32 @@ __device__ GPUTraversalResult gpu_bvh_hit(
                 }
 
                 float hit_t;
+                float hit_x;
+                float hit_y;
+                float hit_z;
 
                 if (gpu_quad_hit(
                     primitive,
                     ray,
                     ray_t_min,
                     result.t,
-                    hit_t
+                    hit_t,
+                    hit_x,
+                    hit_y,
+                    hit_z
                 )) {
                     result.t = hit_t;
                     result.primitive_index = primitive_index;
                     result.hit = 1;
+
+                    result.position_x = hit_x;
+                    result.position_y = hit_y;
+                    result.position_z = hit_z;
+
+                    // The quad's stored normal is already normalized.
+                    result.normal_x = primitive.parameters[9];
+                    result.normal_y = primitive.parameters[10];
+                    result.normal_z = primitive.parameters[11];
                 }
             }
         } else {

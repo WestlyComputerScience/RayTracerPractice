@@ -76,6 +76,6 @@ struct GPUScene {
     std::vector<GPUBvhNode> bvh_nodes;
     std::vector<GPUPrimitive> primitives;
     std::vector<GPUMaterial> materials;
+    std::vector<int> light_indices;
 };
-
 #endif

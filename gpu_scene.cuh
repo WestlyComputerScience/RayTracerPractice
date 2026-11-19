@@ -12,10 +12,12 @@ struct GPUDeviceScene {
     GPUBvhNode* bvh_nodes = nullptr;
     GPUPrimitive* primitives = nullptr;
     GPUMaterial* materials = nullptr;
+    int* light_indices = nullptr;
 
     size_t bvh_node_count = 0;
     size_t primitive_count = 0;
     size_t material_count = 0;
+    size_t light_count = 0;
 };
 
 // Uploads a CPU GPUScene to CUDA device memory.

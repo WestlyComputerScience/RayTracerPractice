@@ -228,6 +228,18 @@ inline GPUScene build_gpu_scene_from_list(
             *quad
         );
 
+        int primitive_index = static_cast<int>(
+            scene.primitives.size()
+        );
+
+        // Record this primitive if it represents an emissive light.
+        if (
+            scene.materials[primitive.material_index].type ==
+            GPUMaterialType::DiffuseLight
+        ) {
+            scene.light_indices.push_back(primitive_index);
+        }
+
         scene.primitives.push_back(primitive);
     }
 
