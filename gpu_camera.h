@@ -24,6 +24,8 @@ struct GPUCamera {
 
     int samples_per_pixel;
     int max_ray_bounces;
+    int sqrt_spp;
+    float recip_sqrt_spp;
 
     float background_r;
     float background_g;

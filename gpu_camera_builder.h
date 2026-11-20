@@ -12,6 +12,7 @@ inline GPUVec3 convert_vec3_to_gpu(const Vec3& v) {
     };
 }
 
+
 inline GPUCamera build_gpu_camera(const Camera& camera) {
     GPUCamera gpu_camera{};
 
@@ -42,6 +43,12 @@ inline GPUCamera build_gpu_camera(const Camera& camera) {
     gpu_camera.samples_per_pixel =
         camera.config.samples_per_pixel;
 
+    gpu_camera.sqrt_spp =
+        static_cast<int>(std::sqrt(camera.config.samples_per_pixel));
+
+    gpu_camera.recip_sqrt_spp =
+        1.0f / gpu_camera.sqrt_spp;
+
     gpu_camera.max_ray_bounces =
         camera.config.max_ray_bounces;
 
@@ -56,5 +63,6 @@ inline GPUCamera build_gpu_camera(const Camera& camera) {
 
     return gpu_camera;
 }
+
 
 #endif

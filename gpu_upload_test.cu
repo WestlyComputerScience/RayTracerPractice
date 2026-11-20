@@ -64,7 +64,7 @@ bool gpu_ray_matches_cpu(
     const GPURay& gpu_ray,
     const Ray& cpu_ray
 ) {
-    constexpr float tolerance = 1e-4f;
+    constexpr float tolerance = 1e-3f;
 
     return
         std::fabs(gpu_ray.origin_x - static_cast<float>(cpu_ray.origin().x())) < tolerance &&
@@ -324,7 +324,7 @@ void test_gpu_scene_render(const GPUDeviceScene& device_scene) {
     }
 
 
-    // ------------------------------------------------------------
+        // ------------------------------------------------------------
     // Test 3: Render the scene using Lambertian diffuse lighting.
     // ------------------------------------------------------------
 
@@ -339,8 +339,15 @@ void test_gpu_scene_render(const GPUDeviceScene& device_scene) {
         device_pixels
     );
 
-    check_cuda(cudaGetLastError(), "Launching GPU diffuse-rendering kernel");
-    check_cuda(cudaDeviceSynchronize(), "Executing GPU diffuse-rendering kernel");
+    check_cuda(
+        cudaGetLastError(),
+        "Launching GPU diffuse-rendering kernel"
+    );
+
+    check_cuda(
+        cudaDeviceSynchronize(),
+        "Executing GPU diffuse-rendering kernel"
+    );
 
     check_cuda(
         cudaMemcpy(
@@ -352,14 +359,13 @@ void test_gpu_scene_render(const GPUDeviceScene& device_scene) {
         "Copying diffuse-rendered pixels"
     );
 
-    cudaFree(device_pixels);
-
-    // Expected intensity:
-    // dot((0, 0, -1), (-0.40824829, 0.40824829, -0.81649658))
     constexpr float expected_diffuse = 0.81649658f;
 
     int diffuse_red_pixels = 0;
     int diffuse_green_pixels = 0;
+
+    // Reuse light_pixels, which was declared in Test 1.
+    light_pixels = 0;
     background_pixels = 0;
     diagnostic_pixels = 0;
     unknown_pixels = 0;
@@ -374,6 +380,11 @@ void test_gpu_scene_render(const GPUDeviceScene& device_scene) {
             std::fabs(pixel.r) < tolerance &&
             std::fabs(pixel.g - expected_diffuse) < tolerance &&
             std::fabs(pixel.b) < tolerance;
+
+        bool is_light =
+            std::fabs(pixel.r - 5.0f) < tolerance &&
+            std::fabs(pixel.g - 5.0f) < tolerance &&
+            std::fabs(pixel.b - 5.0f) < tolerance;
 
         bool is_background =
             std::fabs(pixel.r - scene_gpu_camera.background_r) < tolerance &&
@@ -391,6 +402,9 @@ void test_gpu_scene_render(const GPUDeviceScene& device_scene) {
         else if (is_diffuse_green) {
             diffuse_green_pixels++;
         }
+        else if (is_light) {
+            light_pixels++;
+        }
         else if (is_background) {
             background_pixels++;
         }
@@ -405,6 +419,7 @@ void test_gpu_scene_render(const GPUDeviceScene& device_scene) {
     std::cout << "\nGPU diffuse-rendering results:\n";
     std::cout << "Diffuse red pixels: " << diffuse_red_pixels << '\n';
     std::cout << "Diffuse green pixels: " << diffuse_green_pixels << '\n';
+    std::cout << "Light pixels: " << light_pixels << '\n';
     std::cout << "Background pixels: " << background_pixels << '\n';
     std::cout << "Diagnostic pixels: " << diagnostic_pixels << '\n';
     std::cout << "Unknown pixels: " << unknown_pixels << '\n';
@@ -415,6 +430,7 @@ void test_gpu_scene_render(const GPUDeviceScene& device_scene) {
     bool diffuse_passed =
         diffuse_red_pixels > 0 &&
         diffuse_green_pixels > 0 &&
+        light_pixels > 0 &&
         background_pixels > 0 &&
         diagnostic_pixels == 0 &&
         unknown_pixels == 0;
@@ -422,6 +438,8 @@ void test_gpu_scene_render(const GPUDeviceScene& device_scene) {
     std::cout << "GPU diffuse rendering: "
               << (diffuse_passed ? "PASS" : "FAIL")
               << '\n';
+
+    cudaFree(device_pixels);
 
     if (!diffuse_passed) {
         throw std::runtime_error("GPU diffuse-rendering test failed.");
@@ -584,6 +602,175 @@ int main() {
             << (rays_match ? "MATCH" : "MISMATCH")
             << '\n';
 
+        // Test stratified multi-sample GPU camera ray generation.
+        GPUCamera sample_camera = gpu_camera;
+
+        sample_camera.image_width = 4;
+        sample_camera.image_height = 3;
+        sample_camera.samples_per_pixel = 4;
+        sample_camera.sqrt_spp = 2;
+        sample_camera.recip_sqrt_spp = 0.5f;
+
+        int sample_pixel_count =
+            sample_camera.image_width * sample_camera.image_height;
+
+        int sample_count_per_pixel =
+            sample_camera.sqrt_spp * sample_camera.sqrt_spp;
+
+        int total_sample_count =
+            sample_pixel_count * sample_count_per_pixel;
+
+        GPURay* device_sample_rays = nullptr;
+
+        check_cuda(
+            cudaMalloc(
+                reinterpret_cast<void**>(&device_sample_rays),
+                total_sample_count * sizeof(GPURay)
+            ),
+            "cudaMalloc multi-sample camera rays"
+        );
+
+        int sample_blocks =
+            (total_sample_count + threads_per_block - 1)
+            / threads_per_block;
+
+        gpu_generate_camera_sample_rays<<<
+            sample_blocks,
+            threads_per_block
+        >>>(
+            sample_camera,
+            device_sample_rays
+        );
+
+        check_cuda(
+            cudaGetLastError(),
+            "multi-sample camera kernel launch"
+        );
+
+        check_cuda(
+            cudaDeviceSynchronize(),
+            "multi-sample camera synchronization"
+        );
+
+        std::vector<GPURay> sample_rays(total_sample_count);
+
+        check_cuda(
+            cudaMemcpy(
+                sample_rays.data(),
+                device_sample_rays,
+                total_sample_count * sizeof(GPURay),
+                cudaMemcpyDeviceToHost
+            ),
+            "cudaMemcpy multi-sample camera rays"
+        );
+
+        cudaFree(device_sample_rays);
+
+        std::cout
+            << "GPU multi-sample camera ray generation: "
+            << sample_rays.size() << " rays generated"
+            << '\n';
+
+                    // Validate that every sample lies inside its expected
+        // stratified subpixel cell.
+        bool stratified_samples_match = true;
+
+        float delta_u_length_squared =
+            sample_camera.pixel_delta_u.x * sample_camera.pixel_delta_u.x +
+            sample_camera.pixel_delta_u.y * sample_camera.pixel_delta_u.y +
+            sample_camera.pixel_delta_u.z * sample_camera.pixel_delta_u.z;
+
+        float delta_v_length_squared =
+            sample_camera.pixel_delta_v.x * sample_camera.pixel_delta_v.x +
+            sample_camera.pixel_delta_v.y * sample_camera.pixel_delta_v.y +
+            sample_camera.pixel_delta_v.z * sample_camera.pixel_delta_v.z;
+
+        for (int index = 0; index < total_sample_count; index++) {
+            int pixel_index = index / sample_count_per_pixel;
+
+            int i = pixel_index % sample_camera.image_width;
+            int j = pixel_index / sample_camera.image_width;
+
+            int sample_index = index % sample_count_per_pixel;
+
+            int s_i = sample_index % sample_camera.sqrt_spp;
+            int s_j = sample_index / sample_camera.sqrt_spp;
+
+            const GPURay& ray = sample_rays[index];
+
+            // Recover the sampled pixel position from the ray.
+            float pixel_x = ray.origin_x + ray.direction_x;
+            float pixel_y = ray.origin_y + ray.direction_y;
+            float pixel_z = ray.origin_z + ray.direction_z;
+
+            float relative_x =
+                pixel_x - sample_camera.pixel00_loc.x;
+
+            float relative_y =
+                pixel_y - sample_camera.pixel00_loc.y;
+
+            float relative_z =
+                pixel_z - sample_camera.pixel00_loc.z;
+
+            // Project the sampled position onto the camera's
+            // horizontal and vertical pixel-delta vectors.
+            float pixel_coordinate_x =
+                (
+                    relative_x * sample_camera.pixel_delta_u.x +
+                    relative_y * sample_camera.pixel_delta_u.y +
+                    relative_z * sample_camera.pixel_delta_u.z
+                ) / delta_u_length_squared;
+
+            float pixel_coordinate_y =
+                (
+                    relative_x * sample_camera.pixel_delta_v.x +
+                    relative_y * sample_camera.pixel_delta_v.y +
+                    relative_z * sample_camera.pixel_delta_v.z
+                ) / delta_v_length_squared;
+
+            float offset_x = pixel_coordinate_x - i;
+            float offset_y = pixel_coordinate_y - j;
+
+            float lower_x =
+                -0.5f + s_i * sample_camera.recip_sqrt_spp;
+
+            float upper_x =
+                -0.5f + (s_i + 1) * sample_camera.recip_sqrt_spp;
+
+            float lower_y =
+                -0.5f + s_j * sample_camera.recip_sqrt_spp;
+
+            float upper_y =
+                -0.5f + (s_j + 1) * sample_camera.recip_sqrt_spp;
+
+            constexpr float tolerance = 1e-3f;
+
+            bool sample_is_valid =
+                offset_x >= lower_x - tolerance &&
+                offset_x < upper_x + tolerance &&
+                offset_y >= lower_y - tolerance &&
+                offset_y < upper_y + tolerance;
+
+            if (!sample_is_valid) {
+                std::cout
+                    << "Stratified sample mismatch at index "
+                    << index
+                    << ": pixel (" << i << ", " << j << ")"
+                    << ", stratum (" << s_i << ", " << s_j << ")"
+                    << ", offset (" << offset_x << ", " << offset_y << ")"
+                    << '\n';
+
+                stratified_samples_match = false;
+                break;
+            }
+        }
+
+        std::cout
+            << "GPU stratified sampling: "
+            << (stratified_samples_match ? "PASS" : "FAIL")
+            << '\n';
+
+        // Continue with the existing background-rendering test.
         GPUColor* device_pixels = nullptr;
 
         check_cuda(

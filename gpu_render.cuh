@@ -216,6 +216,7 @@ __global__ void gpu_render_normals(
 
 // Renders Lambertian materials using a directional light.
 // Surface normals are oriented against the incoming camera ray.
+
 __global__ void gpu_render_diffuse(
     GPUCamera camera,
     const GPUBvhNode* nodes,
@@ -304,7 +305,17 @@ __global__ void gpu_render_diffuse(
 
     const GPUMaterial& material = materials[material_index];
 
-    // This first diffuse implementation supports Lambertian materials.
+    // Emissive surfaces return their emitted radiance.
+    if (material.type == GPUMaterialType::DiffuseLight) {
+        pixels[index] = GPUColor{
+            material.emission_r,
+            material.emission_g,
+            material.emission_b
+        };
+        return;
+    }
+
+    // This diffuse implementation supports Lambertian materials.
     if (material.type != GPUMaterialType::Lambertian) {
         pixels[index] = GPUColor{1.0f, 0.0f, 1.0f};
         return;
@@ -351,5 +362,6 @@ __global__ void gpu_render_diffuse(
         material.albedo_b * diffuse_intensity
     };
 }
+
 
 #endif
