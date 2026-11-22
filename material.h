@@ -223,6 +223,10 @@ class Isotropic : public Material {
         */
         Isotropic(shared_ptr<Texture> tex) : tex(tex) {}
 
+        const shared_ptr<Texture>& get_texture() const {
+            return tex;
+        }
+            
         /**
         * Computes a random outbound ray direction and sets the color attenuation.
         */
@@ -347,6 +351,18 @@ public:
           roughness(std::clamp(roughness, real(0.001), real(1.0))),
           metalness(std::clamp(metalness, real(0.0), real(1.0))) {}
 
+    const shared_ptr<Texture>& get_albedo_texture() const {
+        return albedo;
+    }
+
+    real get_roughness() const {
+        return roughness;
+    }
+
+    real get_metalness() const {
+        return metalness;
+    }
+    
     /**
      * Samples and evaluates the Cook-Torrance GGX
      * specular BRDF.

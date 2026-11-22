@@ -52,7 +52,9 @@ enum class GPUMaterialType : uint32_t {
     Lambertian,
     Metal,
     Dielectric,
-    DiffuseLight
+    DiffuseLight,
+    Isotropic,
+    GGX
 };
 
 // GPU-compatible material data.
@@ -63,8 +65,14 @@ struct GPUMaterial {
     float albedo_g;
     float albedo_b;
 
+    // Metal fuzz or GGX roughness, depending on material type.
     float roughness;
+
+    // Dielectric index of refraction.
     float refractive_index;
+
+    // GGX metallic parameter.
+    float metalness;
 
     float emission_r;
     float emission_g;
@@ -78,4 +86,5 @@ struct GPUScene {
     std::vector<GPUMaterial> materials;
     std::vector<int> light_indices;
 };
+
 #endif

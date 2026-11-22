@@ -1,6 +1,10 @@
 #include <cmath>
 #include <iostream>
 #include <stdexcept>
+#include <algorithm>
+#include <vector>
+#include <string>
+#include <fstream>
 
 #include "common_constants.h"
 #include "vec3.h"
@@ -15,6 +19,47 @@
 #include "gpu_camera.cuh"
 #include "gpu_render.cuh"
 #include "gpu_traversal.cuh"
+
+
+bool write_gpu_ppm(
+    const std::string& filename,
+    const std::vector<GPUColor>& pixels,
+    int width,
+    int height
+) {
+    if (width <= 0 || height <= 0 ||
+        pixels.size() != static_cast<size_t>(width * height)) {
+        return false;
+    }
+
+    std::ofstream output(filename);
+
+    if (!output) {
+        return false;
+    }
+
+    output << "P3\n";
+    output << width << " " << height << "\n";
+    output << "255\n";
+
+    for (const GPUColor& pixel : pixels) {
+        float r = std::isfinite(pixel.r) ? pixel.r : 0.0f;
+        float g = std::isfinite(pixel.g) ? pixel.g : 0.0f;
+        float b = std::isfinite(pixel.b) ? pixel.b : 0.0f;
+
+        r = std::sqrt(std::max(0.0f, r));
+        g = std::sqrt(std::max(0.0f, g));
+        b = std::sqrt(std::max(0.0f, b));
+
+        int ir = static_cast<int>(256.0f * std::clamp(r, 0.0f, 0.999f));
+        int ig = static_cast<int>(256.0f * std::clamp(g, 0.0f, 0.999f));
+        int ib = static_cast<int>(256.0f * std::clamp(b, 0.0f, 0.999f));
+
+        output << ir << ' ' << ig << ' ' << ib << '\n';
+    }
+
+    return output.good();
+}
 
 __global__ void gpu_bvh_test_kernel(
     const GPUBvhNode* nodes,
@@ -446,6 +491,168 @@ void test_gpu_scene_render(const GPUDeviceScene& device_scene) {
     }
 }
 
+
+void test_gpu_depth_of_field() {
+    // Create three colored targets at different distances.
+    HittableList world;
+
+    auto red_material = make_shared<Lambertian>(
+        Color(0.9, 0.08, 0.08)
+    );
+
+    auto green_material = make_shared<Lambertian>(
+        Color(0.08, 0.9, 0.08)
+    );
+
+    auto blue_material = make_shared<Lambertian>(
+        Color(0.08, 0.15, 0.9)
+    );
+
+    // Focus target: 8 units from the camera.
+    world.add(make_shared<Quad>(
+        Point3(-0.9, -1.3, 0),
+        Vec3(1.8, 0, 0),
+        Vec3(0, 2.6, 0),
+        red_material
+    ));
+
+    // Background target: 11 units from the camera.
+    world.add(make_shared<Quad>(
+        Point3(-3.08 - 0.99, -1.54, 3),
+        Vec3(1.98, 0, 0),
+        Vec3(0, 3.08, 0),
+        green_material
+    ));
+
+    // Foreground target: 14 units from the camera.
+    world.add(make_shared<Quad>(
+        Point3(3.92 - 1.26, -1.96, 6),
+        Vec3(2.52, 0, 0),
+        Vec3(0, 3.92, 0),
+        blue_material
+    ));
+
+    // Build and upload the GPU scene.
+    GPUScene scene = build_gpu_scene_from_list(world);
+    GPUDeviceScene device_scene = upload_gpu_scene(scene);
+
+    std::cout << "\nGPU depth-of-field scene:\n";
+    std::cout << "BVH nodes: " << device_scene.bvh_node_count << '\n';
+    std::cout << "Primitives: " << device_scene.primitive_count << '\n';
+
+    // Configure the camera.
+    Camera camera;
+
+    camera.config.image_width = 600;
+    camera.config.aspect_ratio = 16.0 / 9.0;
+    camera.config.samples_per_pixel = 64;
+    camera.config.max_ray_bounces = 1;
+
+    camera.config.lookfrom = Point3(0, 0, -8);
+    camera.config.lookat = Point3(0, 0, 0);
+    camera.config.vup = Vec3(0, 1, 0);
+
+    camera.config.vfov = 40;
+    camera.config.focus_dist = 8;
+
+    camera.config.background = Color(0.025, 0.025, 0.025);
+
+    const int image_width = camera.config.image_width;
+    const int image_height = static_cast<int>(
+        image_width / camera.config.aspect_ratio
+    );
+
+    const int pixel_count = image_width * image_height;
+
+    GPUColor* device_pixels = nullptr;
+
+    check_cuda(
+        cudaMalloc(
+            &device_pixels,
+            pixel_count * sizeof(GPUColor)
+        ),
+        "Allocating depth-of-field render pixels"
+    );
+
+    const int threads_per_block = 256;
+    const int blocks =
+        (pixel_count + threads_per_block - 1) / threads_per_block;
+
+    // Render once with the specified aperture setting.
+    auto render = [&](real defocus_angle, const std::string& filename) {
+        camera.config.defocus_angle = defocus_angle;
+        camera.initialize();
+
+        GPUCamera gpu_camera = build_gpu_camera(camera);
+
+        gpu_render_scene_multisample<<<blocks, threads_per_block>>>(
+            gpu_camera,
+            device_scene.bvh_nodes,
+            device_scene.primitives,
+            device_scene.materials,
+            static_cast<int>(device_scene.bvh_node_count),
+            static_cast<int>(device_scene.primitive_count),
+            static_cast<int>(device_scene.material_count),
+            device_pixels
+        );
+
+        check_cuda(
+            cudaGetLastError(),
+            "Launching multisample depth-of-field renderer"
+        );
+
+        check_cuda(
+            cudaDeviceSynchronize(),
+            "Synchronizing depth-of-field renderer"
+        );
+
+        std::vector<GPUColor> pixels(pixel_count);
+
+        check_cuda(
+            cudaMemcpy(
+                pixels.data(),
+                device_pixels,
+                pixel_count * sizeof(GPUColor),
+                cudaMemcpyDeviceToHost
+            ),
+            "Copying depth-of-field render to CPU"
+        );
+
+        if (!write_gpu_ppm(
+            filename,
+            pixels,
+            image_width,
+            image_height
+        )) {
+            throw std::runtime_error(
+                "Failed to write image: " + filename
+            );
+        }
+
+        std::cout
+            << "Wrote " << filename
+            << " (defocus angle: " << defocus_angle << ")\n";
+    };
+
+    try {
+        render(0, "gpu_defocus_off.ppm");
+        render(15, "gpu_defocus_on.ppm");
+    } catch (...) {
+        cudaFree(device_pixels);
+        free_gpu_scene(device_scene);
+        throw;
+    }
+
+    check_cuda(
+        cudaFree(device_pixels),
+        "Freeing depth-of-field render pixels"
+    );
+
+    free_gpu_scene(device_scene);
+
+    std::cout << "GPU depth-of-field test: PASS\n";
+}
+
 int main() {
     try {
         // Initialize a CPU camera with known settings.
@@ -768,6 +975,263 @@ int main() {
         std::cout
             << "GPU stratified sampling: "
             << (stratified_samples_match ? "PASS" : "FAIL")
+            << '\n';
+
+                // Test GPU defocus-disk sampling.
+        Camera defocus_test_camera = camera;
+        defocus_test_camera.config.defocus_angle = 10.0;
+
+        defocus_test_camera.initialize();
+
+        GPUCamera defocus_gpu_camera =
+            build_gpu_camera(defocus_test_camera);
+
+        // Limit this test to exactly 1,000 generated rays.
+        defocus_gpu_camera.image_width = 10;
+        defocus_gpu_camera.image_height = 1;
+        defocus_gpu_camera.samples_per_pixel = 100;
+        defocus_gpu_camera.sqrt_spp = 10;
+        defocus_gpu_camera.recip_sqrt_spp = 0.1f;
+
+        std::cout
+            << "Defocus angle: " << defocus_gpu_camera.defocus_angle
+            << '\n';
+
+        std::cout
+            << "Defocus disk U: "
+            << defocus_gpu_camera.defocus_disk_u.x << ", "
+            << defocus_gpu_camera.defocus_disk_u.y << ", "
+            << defocus_gpu_camera.defocus_disk_u.z
+            << '\n';
+
+        std::cout
+            << "Defocus disk V: "
+            << defocus_gpu_camera.defocus_disk_v.x << ", "
+            << defocus_gpu_camera.defocus_disk_v.y << ", "
+            << defocus_gpu_camera.defocus_disk_v.z
+            << '\n';
+
+                constexpr int defocus_sample_count = 1000;
+
+        GPURay* device_defocus_rays = nullptr;
+
+        check_cuda(
+            cudaMalloc(
+                reinterpret_cast<void**>(&device_defocus_rays),
+                defocus_sample_count * sizeof(GPURay)
+            ),
+            "cudaMalloc defocus sample rays"
+        );
+
+        gpu_generate_camera_sample_rays<<<
+            (defocus_sample_count + 255) / 256,
+            256
+        >>>(
+            defocus_gpu_camera,
+            device_defocus_rays
+        );
+
+        check_cuda(
+            cudaGetLastError(),
+            "defocus sample kernel launch"
+        );
+
+        check_cuda(
+            cudaDeviceSynchronize(),
+            "defocus sample synchronization"
+        );
+
+        std::vector<GPURay> defocus_rays(defocus_sample_count);
+
+        check_cuda(
+            cudaMemcpy(
+                defocus_rays.data(),
+                device_defocus_rays,
+                defocus_sample_count * sizeof(GPURay),
+                cudaMemcpyDeviceToHost
+            ),
+            "cudaMemcpy defocus sample rays"
+        );
+
+        cudaFree(device_defocus_rays);
+
+        int defocus_noncenter_count = 0;
+int defocus_invalid_count = 0;
+int direction_invalid_count = 0;
+
+float maximum_radius_squared = 0.0f;
+
+float disk_u_length_squared =
+    defocus_gpu_camera.defocus_disk_u.x *
+        defocus_gpu_camera.defocus_disk_u.x +
+    defocus_gpu_camera.defocus_disk_u.y *
+        defocus_gpu_camera.defocus_disk_u.y +
+    defocus_gpu_camera.defocus_disk_u.z *
+        defocus_gpu_camera.defocus_disk_u.z;
+
+float disk_v_length_squared =
+    defocus_gpu_camera.defocus_disk_v.x *
+        defocus_gpu_camera.defocus_disk_v.x +
+    defocus_gpu_camera.defocus_disk_v.y *
+        defocus_gpu_camera.defocus_disk_v.y +
+    defocus_gpu_camera.defocus_disk_v.z *
+        defocus_gpu_camera.defocus_disk_v.z;
+
+int defocus_sample_count_per_pixel =
+    defocus_gpu_camera.sqrt_spp *
+    defocus_gpu_camera.sqrt_spp;
+
+for (int index = 0; index < defocus_sample_count; index++) {
+    const GPURay& ray = defocus_rays[index];
+
+    // --------------------------------------------------------
+    // 1. Validate the ray origin against the defocus disk.
+    // --------------------------------------------------------
+
+    float offset_x =
+        ray.origin_x - defocus_gpu_camera.center.x;
+
+    float offset_y =
+        ray.origin_y - defocus_gpu_camera.center.y;
+
+    float offset_z =
+        ray.origin_z - defocus_gpu_camera.center.z;
+
+    float disk_x =
+        (offset_x * defocus_gpu_camera.defocus_disk_u.x +
+         offset_y * defocus_gpu_camera.defocus_disk_u.y +
+         offset_z * defocus_gpu_camera.defocus_disk_u.z) /
+        disk_u_length_squared;
+
+    float disk_y =
+        (offset_x * defocus_gpu_camera.defocus_disk_v.x +
+         offset_y * defocus_gpu_camera.defocus_disk_v.y +
+         offset_z * defocus_gpu_camera.defocus_disk_v.z) /
+        disk_v_length_squared;
+
+    float radius_squared =
+        disk_x * disk_x + disk_y * disk_y;
+
+    if (radius_squared > maximum_radius_squared) {
+        maximum_radius_squared = radius_squared;
+    }
+
+    if (radius_squared > 1.00001f) {
+        defocus_invalid_count++;
+    }
+
+    if (offset_x * offset_x +
+        offset_y * offset_y +
+        offset_z * offset_z > 1e-10f) {
+        defocus_noncenter_count++;
+    }
+
+    // --------------------------------------------------------
+    // 2. Recover the pixel sample targeted by this ray.
+    // --------------------------------------------------------
+
+    float pixel_x = ray.origin_x + ray.direction_x;
+    float pixel_y = ray.origin_y + ray.direction_y;
+    float pixel_z = ray.origin_z + ray.direction_z;
+
+    float relative_x =
+        pixel_x - defocus_gpu_camera.pixel00_loc.x;
+
+    float relative_y =
+        pixel_y - defocus_gpu_camera.pixel00_loc.y;
+
+    float relative_z =
+        pixel_z - defocus_gpu_camera.pixel00_loc.z;
+
+    float pixel_coordinate_x =
+        (
+            relative_x * defocus_gpu_camera.pixel_delta_u.x +
+            relative_y * defocus_gpu_camera.pixel_delta_u.y +
+            relative_z * defocus_gpu_camera.pixel_delta_u.z
+        ) / delta_u_length_squared;
+
+    float pixel_coordinate_y =
+        (
+            relative_x * defocus_gpu_camera.pixel_delta_v.x +
+            relative_y * defocus_gpu_camera.pixel_delta_v.y +
+            relative_z * defocus_gpu_camera.pixel_delta_v.z
+        ) / delta_v_length_squared;
+
+    // --------------------------------------------------------
+    // 3. Determine which pixel and stratum generated this ray.
+    // --------------------------------------------------------
+
+    int pixel_index = index / defocus_sample_count_per_pixel;
+
+    int i = pixel_index % defocus_gpu_camera.image_width;
+    int j = pixel_index / defocus_gpu_camera.image_width;
+
+    int sample_index = index % defocus_sample_count_per_pixel;
+
+    int s_i = sample_index % defocus_gpu_camera.sqrt_spp;
+    int s_j = sample_index / defocus_gpu_camera.sqrt_spp;
+
+    float sample_offset_x = pixel_coordinate_x - i;
+    float sample_offset_y = pixel_coordinate_y - j;
+
+    float lower_x =
+        -0.5f + s_i * defocus_gpu_camera.recip_sqrt_spp;
+
+    float upper_x =
+        -0.5f + (s_i + 1) * defocus_gpu_camera.recip_sqrt_spp;
+
+    float lower_y =
+        -0.5f + s_j * defocus_gpu_camera.recip_sqrt_spp;
+
+    float upper_y =
+        -0.5f + (s_j + 1) * defocus_gpu_camera.recip_sqrt_spp;
+
+    constexpr float tolerance = 1e-3f;
+
+    bool direction_is_valid =
+        sample_offset_x >= lower_x - tolerance &&
+        sample_offset_x < upper_x + tolerance &&
+        sample_offset_y >= lower_y - tolerance &&
+        sample_offset_y < upper_y + tolerance;
+
+    if (!direction_is_valid) {
+        direction_invalid_count++;
+    }
+        }
+
+        std::cout
+            << "GPU defocus samples: "
+            << defocus_rays.size()
+            << '\n';
+
+        std::cout
+            << "Non-center ray origins: "
+            << defocus_noncenter_count
+            << '\n';
+
+        std::cout
+            << "Invalid defocus samples: "
+            << defocus_invalid_count
+            << '\n';
+
+        std::cout
+            << "Maximum disk radius squared: "
+            << maximum_radius_squared
+            << '\n';
+
+        std::cout
+            << "Invalid ray directions: "
+            << direction_invalid_count
+            << '\n';
+
+        bool defocus_passed =
+            defocus_noncenter_count == defocus_sample_count &&
+            defocus_invalid_count == 0 &&
+            direction_invalid_count == 0;
+
+        std::cout
+            << "GPU defocus-disk sampling: "
+            << (defocus_passed ? "PASS" : "FAIL")
             << '\n';
 
         // Continue with the existing background-rendering test.
@@ -1113,6 +1577,8 @@ int main() {
         free_gpu_scene(device_scene);
 
         std::cout << "GPU memory released.\n";
+
+        test_gpu_depth_of_field();
 
         return matches == ray_count ? 0 : 1;
     }

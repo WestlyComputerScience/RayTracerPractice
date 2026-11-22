@@ -1,3 +1,4 @@
+
 #ifndef GPU_SCENE_BUILDER_H
 #define GPU_SCENE_BUILDER_H
 
@@ -11,16 +12,10 @@
 #include "hittable_list.h"
 #include "gpu_bvh_builder.h"
 
-inline GPUMaterial convert_lambertian_to_gpu(
-    const Lambertian& material
+inline Color get_solid_texture_color(
+    const shared_ptr<Texture>& texture
 ) {
-    GPUMaterial gpu_material{};
-
-    gpu_material.type = GPUMaterialType::Lambertian;
-
-    auto solid = std::dynamic_pointer_cast<SolidColor>(
-        material.get_texture()
-    );
+    auto solid = std::dynamic_pointer_cast<SolidColor>(texture);
 
     if (!solid) {
         throw std::runtime_error(
@@ -28,7 +23,19 @@ inline GPUMaterial convert_lambertian_to_gpu(
         );
     }
 
-    const Color& albedo = solid->get_albedo();
+    return solid->get_albedo();
+}
+
+inline GPUMaterial convert_lambertian_to_gpu(
+    const Lambertian& material
+) {
+    GPUMaterial gpu_material{};
+
+    gpu_material.type = GPUMaterialType::Lambertian;
+
+    const Color albedo = get_solid_texture_color(
+        material.get_texture()
+    );
 
     gpu_material.albedo_r = static_cast<float>(albedo.r());
     gpu_material.albedo_g = static_cast<float>(albedo.g());
@@ -75,21 +82,55 @@ inline GPUMaterial convert_diffuse_light_to_gpu(
 
     gpu_material.type = GPUMaterialType::DiffuseLight;
 
-    auto solid = std::dynamic_pointer_cast<SolidColor>(
+    const Color emission = get_solid_texture_color(
         material.get_texture()
     );
-
-    if (!solid) {
-        throw std::runtime_error(
-            "GPU renderer currently only supports SolidColor textures."
-        );
-    }
-
-    const Color& emission = solid->get_albedo();
 
     gpu_material.emission_r = static_cast<float>(emission.r());
     gpu_material.emission_g = static_cast<float>(emission.g());
     gpu_material.emission_b = static_cast<float>(emission.b());
+
+    return gpu_material;
+}
+
+inline GPUMaterial convert_isotropic_to_gpu(
+    const Isotropic& material
+) {
+    GPUMaterial gpu_material{};
+
+    gpu_material.type = GPUMaterialType::Isotropic;
+
+    const Color albedo = get_solid_texture_color(
+        material.get_texture()
+    );
+
+    gpu_material.albedo_r = static_cast<float>(albedo.r());
+    gpu_material.albedo_g = static_cast<float>(albedo.g());
+    gpu_material.albedo_b = static_cast<float>(albedo.b());
+
+    return gpu_material;
+}
+
+inline GPUMaterial convert_ggx_to_gpu(
+    const GGXMaterial& material
+) {
+    GPUMaterial gpu_material{};
+
+    gpu_material.type = GPUMaterialType::GGX;
+
+    const Color albedo = get_solid_texture_color(
+        material.get_albedo_texture()
+    );
+
+    gpu_material.albedo_r = static_cast<float>(albedo.r());
+    gpu_material.albedo_g = static_cast<float>(albedo.g());
+    gpu_material.albedo_b = static_cast<float>(albedo.b());
+
+    gpu_material.roughness =
+        static_cast<float>(material.get_roughness());
+
+    gpu_material.metalness =
+        static_cast<float>(material.get_metalness());
 
     return gpu_material;
 }
@@ -125,6 +166,16 @@ inline int add_material_to_gpu_scene(
         std::dynamic_pointer_cast<DiffuseLight>(material)) {
 
         gpu_material = convert_diffuse_light_to_gpu(*diffuse_light);
+
+    } else if (auto isotropic =
+        std::dynamic_pointer_cast<Isotropic>(material)) {
+
+        gpu_material = convert_isotropic_to_gpu(*isotropic);
+
+    } else if (auto ggx =
+        std::dynamic_pointer_cast<GGXMaterial>(material)) {
+
+        gpu_material = convert_ggx_to_gpu(*ggx);
 
     } else {
         throw std::runtime_error(
