@@ -4,6 +4,7 @@
 #include "gpu_scene.h"
 #include "gpu_intersection.cuh"
 #include "gpu_random.cuh"
+#include "gpu_vec3.cuh"
 #include "gpu_sampling.cuh"
 
 // GPU equivalent of CosinePdf.
@@ -13,8 +14,115 @@ struct GPUCosinePdf {
     float normal_z;
 };
 
+// GPU equivalent of MixturePdf.
+struct GPUMixturePdf {
+    bool sample_hittable;
+};
+
+// GPU equivalent of GGXPdf.
+struct GPUGGXPdf {
+    float normal_x;
+    float normal_y;
+    float normal_z;
+
+    float view_x;
+    float view_y;
+    float view_z;
+
+    float tangent_x;
+    float tangent_y;
+    float tangent_z;
+
+    float bitangent_x;
+    float bitangent_y;
+    float bitangent_z;
+
+    float roughness;
+};
+
 struct GPUSpherePdf {
 };
+
+__device__ inline float gpu_cosine_pdf_value(
+    const GPUCosinePdf& pdf,
+    float direction_x,
+    float direction_y,
+    float direction_z
+) {
+    float length = sqrtf(
+        direction_x * direction_x +
+        direction_y * direction_y +
+        direction_z * direction_z
+    );
+
+    if (length <= 1e-8f) {
+        return 0.0f;
+    }
+
+    float unit_x = direction_x / length;
+    float unit_y = direction_y / length;
+    float unit_z = direction_z / length;
+
+    float cosine_theta =
+        unit_x * pdf.normal_x +
+        unit_y * pdf.normal_y +
+        unit_z * pdf.normal_z;
+
+    return fmaxf(0.0f, cosine_theta / 3.14159265358979323846f);
+}
+
+__device__ inline void gpu_cosine_pdf_generate(
+    const GPUCosinePdf& pdf,
+    unsigned int& seed,
+    float& direction_x,
+    float& direction_y,
+    float& direction_z
+) {
+    constexpr float pi = 3.14159265358979323846f;
+
+    // Generate two uniform random values in [0, 1).
+    float r1 = gpu_random_float(seed);
+    float r2 = gpu_random_float(seed);
+
+    // Match CPU random_cosine_direction().
+    float phi = 2.0f * pi * r1;
+
+    float x = cosf(phi) * sqrtf(r2);
+    float y = sinf(phi) * sqrtf(r2);
+    float z = sqrtf(1.0f - r2);
+
+    // Reconstruct the CPU Onb coordinate system.
+    float w_x = pdf.normal_x;
+    float w_y = pdf.normal_y;
+    float w_z = pdf.normal_z;
+
+    float a_x = fabsf(w_x) > 0.9f ? 0.0f : 1.0f;
+    float a_y = fabsf(w_x) > 0.9f ? 1.0f : 0.0f;
+    float a_z = 0.0f;
+
+    // v = unit_vector(cross(w, a))
+    float v_x = w_y * a_z - w_z * a_y;
+    float v_y = w_z * a_x - w_x * a_z;
+    float v_z = w_x * a_y - w_y * a_x;
+
+    float v_length = sqrtf(
+        v_x * v_x + v_y * v_y + v_z * v_z
+    );
+
+    v_x /= v_length;
+    v_y /= v_length;
+    v_z /= v_length;
+
+    // u = cross(w, v)
+    float u_x = w_y * v_z - w_z * v_y;
+    float u_y = w_z * v_x - w_x * v_z;
+    float u_z = w_x * v_y - w_y * v_x;
+
+    // Transform the local cosine-weighted direction.
+    direction_x = x * u_x + y * v_x + z * w_x;
+    direction_y = x * u_y + y * v_y + z * w_y;
+    direction_z = x * u_z + y * v_z + z * w_z;
+}
 
 __device__ inline float gpu_sphere_pdf_value() {
     return 1.0f / (4.0f * 3.14159265358979323846f);
@@ -313,85 +421,234 @@ __device__ inline bool gpu_hittable_pdf_generate(
     return true;
 }
 
-__device__ inline float gpu_cosine_pdf_value(
-    const GPUCosinePdf& pdf,
+__device__ inline float gpu_ggx_distribution(
+    const GPUGGXPdf& pdf,
+    float hx,
+    float hy,
+    float hz
+) {
+    float alpha = pdf.roughness * pdf.roughness;
+    float alpha2 = alpha * alpha;
+
+    float n_dot_h =
+        pdf.normal_x * hx +
+        pdf.normal_y * hy +
+        pdf.normal_z * hz;
+
+    n_dot_h = fmaxf(n_dot_h, 0.0f);
+
+    float n_dot_h2 = n_dot_h * n_dot_h;
+
+    float denominator =
+        n_dot_h2 * (alpha2 - 1.0f) + 1.0f;
+
+    return alpha2 /
+        (3.14159265358979323846f *
+         denominator * denominator);
+}
+
+__device__ inline float gpu_ggx_geometry_smith_g1(
+    const GPUGGXPdf& pdf,
+    float n_dot_v
+) {
+    float alpha = pdf.roughness * pdf.roughness;
+    float alpha2 = alpha * alpha;
+
+    float denominator = n_dot_v + sqrtf(
+        alpha2 +
+        (1.0f - alpha2) * n_dot_v * n_dot_v
+    );
+
+    return (2.0f * n_dot_v) /
+        fmaxf(denominator, 1e-8f);
+}
+
+// GPU equivalent of sample_ggx_vndf().
+
+__device__ inline GPUVec3 gpu_sample_ggx_vndf(
+    const GPUVec3& view_local,
+    float roughness,
+    float r1,
+    float r2
+) {
+    float alpha = roughness * roughness;
+
+    // Stretch the view direction.
+    GPUVec3 v = gpu_unit_vector(GPUVec3{
+        alpha * view_local.x,
+        alpha * view_local.y,
+        view_local.z
+    });
+
+    // Construct an orthonormal basis around the stretched view.
+    float lensq = v.x * v.x + v.y * v.y;
+
+    GPUVec3 t1 = lensq > 1e-8f
+        ? GPUVec3{
+            -v.y / sqrtf(lensq),
+             v.x / sqrtf(lensq),
+             0.0f
+        }
+        : GPUVec3{1.0f, 0.0f, 0.0f};
+
+    GPUVec3 t2 = gpu_cross(v, t1);
+
+    // Sample a point on the projected disk.
+    float radius = sqrtf(r1);
+    float phi = 2.0f * 3.14159265358979323846f * r2;
+
+    float p1 = radius * cosf(phi);
+    float p2 = radius * sinf(phi);
+
+    // Warp the second coordinate.
+    float s = 0.5f * (1.0f + v.z);
+
+    p2 = (1.0f - s) *
+         sqrtf(fmaxf(0.0f, 1.0f - p1 * p1))
+         + s * p2;
+
+    // Reconstruct the visible normal.
+    float p3 = sqrtf(
+        fmaxf(0.0f, 1.0f - p1 * p1 - p2 * p2)
+    );
+
+    GPUVec3 normal =
+        t1 * p1 +
+        t2 * p2 +
+        v * p3;
+
+    // Unstretch the normal.
+    return gpu_unit_vector(GPUVec3{
+        alpha * normal.x,
+        alpha * normal.y,
+        fmaxf(0.0f, normal.z)
+    });
+}
+
+// GPU equivalent of GGXPdf::value().
+__device__ inline float gpu_ggx_pdf_value(
+    const GPUGGXPdf& pdf,
     float direction_x,
     float direction_y,
     float direction_z
 ) {
-    float length = sqrtf(
-        direction_x * direction_x +
-        direction_y * direction_y +
-        direction_z * direction_z
-    );
+    GPUVec3 direction{
+        direction_x,
+        direction_y,
+        direction_z
+    };
 
-    if (length <= 1e-8f) {
+    float direction_length = gpu_length(direction);
+
+    if (direction_length <= 1e-8f) {
         return 0.0f;
     }
 
-    float unit_x = direction_x / length;
-    float unit_y = direction_y / length;
-    float unit_z = direction_z / length;
+    GPUVec3 l = direction / direction_length;
 
-    float cosine_theta =
-        unit_x * pdf.normal_x +
-        unit_y * pdf.normal_y +
-        unit_z * pdf.normal_z;
+    float n_dot_v =
+        pdf.normal_x * pdf.view_x +
+        pdf.normal_y * pdf.view_y +
+        pdf.normal_z * pdf.view_z;
 
-    return fmaxf(0.0f, cosine_theta / 3.14159265358979323846f);
+    float n_dot_l =
+        pdf.normal_x * l.x +
+        pdf.normal_y * l.y +
+        pdf.normal_z * l.z;
+
+    if (n_dot_v <= 1e-8f || n_dot_l <= 0.0f) {
+        return 0.0f;
+    }
+
+    GPUVec3 view{
+        pdf.view_x,
+        pdf.view_y,
+        pdf.view_z
+    };
+
+    GPUVec3 h = gpu_unit_vector(view + l);
+
+    float v_dot_h = gpu_dot(view, h);
+
+    if (v_dot_h <= 1e-8f) {
+        return 0.0f;
+    }
+
+    float D = gpu_ggx_distribution(
+        pdf,
+        h.x,
+        h.y,
+        h.z
+    );
+
+    float G1 = gpu_ggx_geometry_smith_g1(
+        pdf,
+        n_dot_v
+    );
+
+    return D * G1 / (4.0f * n_dot_v);
 }
 
-__device__ inline void gpu_cosine_pdf_generate(
-    const GPUCosinePdf& pdf,
+// GPU equivalent of GGXPdf::generate().
+__device__ inline void gpu_ggx_pdf_generate(
+    const GPUGGXPdf& pdf,
     unsigned int& seed,
     float& direction_x,
     float& direction_y,
     float& direction_z
 ) {
-    constexpr float pi = 3.14159265358979323846f;
+    GPUVec3 normal{
+        pdf.normal_x,
+        pdf.normal_y,
+        pdf.normal_z
+    };
 
-    // Generate two uniform random values in [0, 1).
-    float r1 = gpu_random_float(seed);
-    float r2 = gpu_random_float(seed);
+    GPUVec3 view{
+        pdf.view_x,
+        pdf.view_y,
+        pdf.view_z
+    };
 
-    // Match CPU random_cosine_direction().
-    float phi = 2.0f * pi * r1;
+    GPUVec3 tangent{
+        pdf.tangent_x,
+        pdf.tangent_y,
+        pdf.tangent_z
+    };
 
-    float x = cosf(phi) * sqrtf(r2);
-    float y = sinf(phi) * sqrtf(r2);
-    float z = sqrtf(1.0f - r2);
+    GPUVec3 bitangent{
+        pdf.bitangent_x,
+        pdf.bitangent_y,
+        pdf.bitangent_z
+    };
 
-    // Reconstruct the CPU Onb coordinate system.
-    float w_x = pdf.normal_x;
-    float w_y = pdf.normal_y;
-    float w_z = pdf.normal_z;
+    // Transform the view direction into local coordinates.
+    GPUVec3 view_local{
+        gpu_dot(view, tangent),
+        gpu_dot(view, bitangent),
+        gpu_dot(view, normal)
+    };
 
-    float a_x = fabsf(w_x) > 0.9f ? 0.0f : 1.0f;
-    float a_y = fabsf(w_x) > 0.9f ? 1.0f : 0.0f;
-    float a_z = 0.0f;
-
-    // v = unit_vector(cross(w, a))
-    float v_x = w_y * a_z - w_z * a_y;
-    float v_y = w_z * a_x - w_x * a_z;
-    float v_z = w_x * a_y - w_y * a_x;
-
-    float v_length = sqrtf(
-        v_x * v_x + v_y * v_y + v_z * v_z
+    // Sample a visible microfacet normal.
+    GPUVec3 h_local = gpu_sample_ggx_vndf(
+        view_local,
+        pdf.roughness,
+        gpu_random_float(seed),
+        gpu_random_float(seed)
     );
 
-    v_x /= v_length;
-    v_y /= v_length;
-    v_z /= v_length;
+    // Transform the sampled normal into world coordinates.
+    GPUVec3 h = gpu_unit_vector(
+        tangent * h_local.x +
+        bitangent * h_local.y +
+        normal * h_local.z
+    );
 
-    // u = cross(w, v)
-    float u_x = w_y * v_z - w_z * v_y;
-    float u_y = w_z * v_x - w_x * v_z;
-    float u_z = w_x * v_y - w_y * v_x;
+    // Reflect the incoming direction around the microfacet normal.
+    GPUVec3 direction = gpu_reflect(-view, h);
 
-    // Transform the local cosine-weighted direction.
-    direction_x = x * u_x + y * v_x + z * w_x;
-    direction_y = x * u_y + y * v_y + z * w_y;
-    direction_z = x * u_z + y * v_z + z * w_z;
+    direction_x = direction.x;
+    direction_y = direction.y;
+    direction_z = direction.z;
 }
 
 #endif
