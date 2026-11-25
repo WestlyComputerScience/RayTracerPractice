@@ -47,6 +47,22 @@ class Sphere : public Hittable {
             bbox = Aabb(box1, box2);
         }
 
+        const Point3& get_center() const {
+            return center.origin();
+        }
+
+        real get_radius() const {
+            return radius;
+        }
+
+        const shared_ptr<Material>& get_material() const {
+            return mat;
+        }
+
+        bool is_stationary() const {
+            return center.direction().length_squared() == 0;
+        }
+
         /**
         * Calculates an intersection between a ray and a sphere.
         */

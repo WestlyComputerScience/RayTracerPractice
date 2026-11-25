@@ -51,10 +51,16 @@ inline bool gpu_aabb_hit(
             continue;
         }
 
-        const float inverse_direction = 1.0f / directions[axis];
+        const float inverse_direction =
+            1.0f / directions[axis];
 
-        float t0 = (box_min[axis] - origins[axis]) * inverse_direction;
-        float t1 = (box_max[axis] - origins[axis]) * inverse_direction;
+        float t0 =
+            (box_min[axis] - origins[axis]) *
+            inverse_direction;
+
+        float t1 =
+            (box_max[axis] - origins[axis]) *
+            inverse_direction;
 
         if (t0 < t1) {
             if (t0 > ray_t_min) ray_t_min = t0;
@@ -64,7 +70,8 @@ inline bool gpu_aabb_hit(
             if (t0 < ray_t_max) ray_t_max = t0;
         }
 
-        if (ray_t_max <= ray_t_min) {
+        // Equality is valid for zero-thickness bounding boxes.
+        if (ray_t_max < ray_t_min) {
             return false;
         }
     }

@@ -6,6 +6,7 @@
 #include "gpu_camera.cuh"
 #include "gpu_traversal.cuh"
 #include "gpu_material.cuh"
+#include "gpu_random.cuh"
 
 constexpr int GPU_MAX_PATH_DEPTH = 64;
 
@@ -345,10 +346,11 @@ __global__ void gpu_render_path_tracing(
             int sample_index =
                 s_j * camera.sqrt_spp + s_i;
 
-            unsigned int seed =
+            unsigned int seed = gpu_hash_seed(
                 static_cast<unsigned int>(
                     index * sample_count + sample_index + 1
-                );
+                )
+            );
 
             float offset_x;
             float offset_y;

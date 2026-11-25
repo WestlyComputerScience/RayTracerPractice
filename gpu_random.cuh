@@ -1,6 +1,20 @@
 #ifndef GPU_RANDOM_CUH
 #define GPU_RANDOM_CUH
 
+__device__ inline unsigned int gpu_hash_seed(unsigned int seed) {
+    seed ^= seed >> 16;
+    seed *= 0x7feb352d;
+    seed ^= seed >> 15;
+    seed *= 0x846ca68b;
+    seed ^= seed >> 16;
+
+    if (seed == 0u) {
+        seed = 0x6D2B79F5u;
+    }
+
+    return seed;
+}
+
 __device__ inline unsigned int gpu_random_uint(unsigned int& seed) {
     // Xorshift32 requires a nonzero state.
     if (seed == 0u) {

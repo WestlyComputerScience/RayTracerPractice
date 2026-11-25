@@ -8,6 +8,7 @@
 // Identifies the type of primitive stored in the GPU scene.
 enum class GPUPrimitiveType : uint32_t {
     Quad,
+    Sphere,
     Cone,
     Cylinder,
     Hyperboloid,

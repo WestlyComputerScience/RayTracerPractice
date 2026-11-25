@@ -9,6 +9,7 @@
 #include "texture.h"
 #include "gpu_scene.h"
 #include "quad.h"
+#include "sphere.h"
 #include "hittable_list.h"
 #include "gpu_bvh_builder.h"
 
@@ -245,6 +246,58 @@ inline GPUPrimitive convert_quad_to_gpu(
     return primitive;
 }
 
+// Converts a CPU Sphere into GPU-compatible primitive data.
+inline GPUPrimitive convert_sphere_to_gpu(
+    const Sphere& sphere,
+    int material_index
+) {
+    if (!sphere.is_stationary()) {
+        throw std::runtime_error(
+            "GPU scene builder currently only supports stationary spheres."
+        );
+    }
+
+    GPUPrimitive primitive{};
+
+    primitive.type = GPUPrimitiveType::Sphere;
+
+    Aabb bbox = sphere.bounding_box();
+
+    primitive.min_x = static_cast<float>(bbox.x.min);
+    primitive.min_y = static_cast<float>(bbox.y.min);
+    primitive.min_z = static_cast<float>(bbox.z.min);
+
+    primitive.max_x = static_cast<float>(bbox.x.max);
+    primitive.max_y = static_cast<float>(bbox.y.max);
+    primitive.max_z = static_cast<float>(bbox.z.max);
+
+    const Point3& center = sphere.get_center();
+
+    primitive.parameters[0] = static_cast<float>(center.x());
+    primitive.parameters[1] = static_cast<float>(center.y());
+    primitive.parameters[2] = static_cast<float>(center.z());
+    primitive.parameters[3] = static_cast<float>(sphere.get_radius());
+
+    primitive.material_index = material_index;
+
+    return primitive;
+}
+
+inline GPUPrimitive add_sphere_to_gpu_scene(
+    GPUScene& scene,
+    const Sphere& sphere
+) {
+    int material_index = add_material_to_gpu_scene(
+        scene,
+        sphere.get_material()
+    );
+
+    return convert_sphere_to_gpu(
+        sphere,
+        material_index
+    );
+}
+
 inline GPUPrimitive add_quad_to_gpu_scene(
     GPUScene& scene,
     const Quad& quad
@@ -266,29 +319,28 @@ inline GPUScene build_gpu_scene_from_list(
     GPUScene scene{};
 
     for (const auto& object : world.objects) {
-        auto quad = std::dynamic_pointer_cast<Quad>(object);
+        GPUPrimitive primitive{};
 
-        if (!quad) {
-            throw std::runtime_error(
-                "GPU scene builder currently only supports Quad objects."
+        if (auto quad = std::dynamic_pointer_cast<Quad>(object)) {
+
+            primitive = add_quad_to_gpu_scene(
+                scene,
+                *quad
             );
-        }
 
-        GPUPrimitive primitive = add_quad_to_gpu_scene(
-            scene,
-            *quad
-        );
+        } else if (auto sphere =
+            std::dynamic_pointer_cast<Sphere>(object)) {
 
-        int primitive_index = static_cast<int>(
-            scene.primitives.size()
-        );
+            primitive = add_sphere_to_gpu_scene(
+                scene,
+                *sphere
+            );
 
-        // Record this primitive if it represents an emissive light.
-        if (
-            scene.materials[primitive.material_index].type ==
-            GPUMaterialType::DiffuseLight
-        ) {
-            scene.light_indices.push_back(primitive_index);
+        } else {
+            throw std::runtime_error(
+                "GPU scene builder currently only supports "
+                "Quad and Sphere objects."
+            );
         }
 
         scene.primitives.push_back(primitive);
@@ -296,7 +348,25 @@ inline GPUScene build_gpu_scene_from_list(
 
     build_gpu_bvh(scene);
 
+    // Rebuild light indices after BVH construction because building the BVH
+    // may reorder scene.primitives. Light indices must refer to the final
+    // primitive array used by traversal and PDF sampling.
+    scene.light_indices.clear();
+
+    for (size_t i = 0; i < scene.primitives.size(); ++i) {
+        const GPUPrimitive& primitive = scene.primitives[i];
+
+        if (
+            primitive.material_index >= 0 &&
+            static_cast<size_t>(primitive.material_index) <
+                scene.materials.size() &&
+            scene.materials[primitive.material_index].type ==
+                GPUMaterialType::DiffuseLight
+        ) {
+            scene.light_indices.push_back(static_cast<int>(i));
+        }
+    }
+
     return scene;
 }
-
 #endif

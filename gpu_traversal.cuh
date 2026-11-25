@@ -131,7 +131,116 @@ __device__ bool gpu_quad_hit(
     return true;
 }
 
+// Intersects a ray with a GPU sphere.
+__device__ bool gpu_sphere_hit(
+    const GPUPrimitive& primitive,
+    const GPURay& ray,
+    float ray_t_min,
+    float ray_t_max,
+    float& hit_t,
+    float& hit_x,
+    float& hit_y,
+    float& hit_z,
+    float& normal_x,
+    float& normal_y,
+    float& normal_z
+) {
+    const float center_x = primitive.parameters[0];
+    const float center_y = primitive.parameters[1];
+    const float center_z = primitive.parameters[2];
+
+    const float radius = primitive.parameters[3];
+
+    if (radius <= 0.0f) {
+        return false;
+    }
+
+    const float oc_x = center_x - ray.origin_x;
+    const float oc_y = center_y - ray.origin_y;
+    const float oc_z = center_z - ray.origin_z;
+
+    const float a =
+        ray.direction_x * ray.direction_x +
+        ray.direction_y * ray.direction_y +
+        ray.direction_z * ray.direction_z;
+
+    if (a <= 0.0f) {
+        return false;
+    }
+
+    const float h =
+        ray.direction_x * oc_x +
+        ray.direction_y * oc_y +
+        ray.direction_z * oc_z;
+
+    const float c =
+        oc_x * oc_x +
+        oc_y * oc_y +
+        oc_z * oc_z -
+        radius * radius;
+
+    const float discriminant = h * h - a * c;
+
+    if (discriminant < 0.0f) {
+        return false;
+    }
+
+    const float sqrt_discriminant = sqrtf(discriminant);
+
+    // Try the closer intersection first.
+    float t = (h - sqrt_discriminant) / a;
+
+    // Match CPU Interval::surrounds(): endpoints are excluded.
+    if (t <= ray_t_min || t >= ray_t_max) {
+        // Try the farther intersection.
+        t = (h + sqrt_discriminant) / a;
+
+        if (t <= ray_t_min || t >= ray_t_max) {
+            return false;
+        }
+    }
+
+    const float px =
+        ray.origin_x + t * ray.direction_x;
+
+    const float py =
+        ray.origin_y + t * ray.direction_y;
+
+    const float pz =
+        ray.origin_z + t * ray.direction_z;
+
+    // Calculate the outward surface normal.
+    float nx = (px - center_x) / radius;
+    float ny = (py - center_y) / radius;
+    float nz = (pz - center_z) / radius;
+
+    // Match HitRecord::set_face_normal().
+    const float direction_dot_normal =
+        ray.direction_x * nx +
+        ray.direction_y * ny +
+        ray.direction_z * nz;
+
+    if (direction_dot_normal > 0.0f) {
+        nx = -nx;
+        ny = -ny;
+        nz = -nz;
+    }
+
+    hit_t = t;
+
+    hit_x = px;
+    hit_y = py;
+    hit_z = pz;
+
+    normal_x = nx;
+    normal_y = ny;
+    normal_z = nz;
+
+    return true;
+}
+
 // Traverses the flattened GPU BVH and finds the closest quad hit.
+// Traverses the flattened GPU BVH and finds the closest quad or sphere hit.
 __device__ GPUTraversalResult gpu_bvh_hit(
     const GPUBvhNode* nodes,
     const GPUPrimitive* primitives,
@@ -187,25 +296,57 @@ __device__ GPUTraversalResult gpu_bvh_hit(
                 const GPUPrimitive& primitive =
                     primitives[primitive_index];
 
-                if (primitive.type != GPUPrimitiveType::Quad) {
-                    continue;
-                }
-
                 float hit_t;
                 float hit_x;
                 float hit_y;
                 float hit_z;
 
-                if (gpu_quad_hit(
-                    primitive,
-                    ray,
-                    ray_t_min,
-                    result.t,
-                    hit_t,
-                    hit_x,
-                    hit_y,
-                    hit_z
-                )) {
+                float hit_normal_x;
+                float hit_normal_y;
+                float hit_normal_z;
+
+                bool primitive_hit = false;
+
+                if (primitive.type == GPUPrimitiveType::Quad) {
+
+                    primitive_hit = gpu_quad_hit(
+                        primitive,
+                        ray,
+                        ray_t_min,
+                        result.t,
+                        hit_t,
+                        hit_x,
+                        hit_y,
+                        hit_z
+                    );
+
+                    if (primitive_hit) {
+                        // The quad's stored normal is already normalized.
+                        hit_normal_x = primitive.parameters[9];
+                        hit_normal_y = primitive.parameters[10];
+                        hit_normal_z = primitive.parameters[11];
+                    }
+
+                } else if (
+                    primitive.type == GPUPrimitiveType::Sphere
+                ) {
+
+                    primitive_hit = gpu_sphere_hit(
+                        primitive,
+                        ray,
+                        ray_t_min,
+                        result.t,
+                        hit_t,
+                        hit_x,
+                        hit_y,
+                        hit_z,
+                        hit_normal_x,
+                        hit_normal_y,
+                        hit_normal_z
+                    );
+                }
+
+                if (primitive_hit) {
                     result.t = hit_t;
                     result.primitive_index = primitive_index;
                     result.hit = 1;
@@ -214,10 +355,9 @@ __device__ GPUTraversalResult gpu_bvh_hit(
                     result.position_y = hit_y;
                     result.position_z = hit_z;
 
-                    // The quad's stored normal is already normalized.
-                    result.normal_x = primitive.parameters[9];
-                    result.normal_y = primitive.parameters[10];
-                    result.normal_z = primitive.parameters[11];
+                    result.normal_x = hit_normal_x;
+                    result.normal_y = hit_normal_y;
+                    result.normal_z = hit_normal_z;
                 }
             }
         } else {
