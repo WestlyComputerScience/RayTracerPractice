@@ -16,6 +16,8 @@
 #include "aabb.h"
 #include "material.h"
 #include "quad.h"
+#include "sphere.h"
+#include "quadrics.h"
 #include "hittable_list.h"
 #include "camera.h"
 
@@ -46,6 +48,249 @@ struct GPUHitComparison {
     float linear_t;
 };
 
+
+struct GPUSphereTestInput {
+    GPURay ray;
+    float t_min;
+    float t_max;
+    int primitive_count;
+};
+
+struct GPUSphereTestResult {
+    int hit;
+    int primitive_index;
+
+    float t;
+
+    float position_x;
+    float position_y;
+    float position_z;
+
+    float normal_x;
+    float normal_y;
+    float normal_z;
+};
+
+struct GPUConeTestInput {
+    GPURay ray;
+    float t_min;
+    float t_max;
+    int primitive_count;
+};
+
+struct GPUConeTestResult {
+    int hit;
+    int primitive_index;
+
+    float t;
+
+    float position_x;
+    float position_y;
+    float position_z;
+
+    float normal_x;
+    float normal_y;
+    float normal_z;
+};
+
+__global__ void cone_intersection_test_kernel(
+    const GPUPrimitive* primitives,
+    const GPUConeTestInput* tests,
+    GPUConeTestResult* results,
+    int test_count
+) {
+    const int index = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (index >= test_count) {
+        return;
+    }
+
+    const GPUConeTestInput& test = tests[index];
+
+    float closest_t = test.t_max;
+
+    int hit = 0;
+    int closest_primitive_index = -1;
+
+    float closest_x = 0.0f;
+    float closest_y = 0.0f;
+    float closest_z = 0.0f;
+
+    float closest_normal_x = 0.0f;
+    float closest_normal_y = 0.0f;
+    float closest_normal_z = 0.0f;
+
+    for (int i = 0; i < test.primitive_count; i++) {
+        const GPUPrimitive& primitive = primitives[i];
+
+        float hit_t;
+        float hit_x;
+        float hit_y;
+        float hit_z;
+
+        float normal_x;
+        float normal_y;
+        float normal_z;
+
+        const bool primitive_hit = gpu_cone_hit(
+            primitive,
+            test.ray,
+            test.t_min,
+            closest_t,
+            hit_t,
+            hit_x,
+            hit_y,
+            hit_z,
+            normal_x,
+            normal_y,
+            normal_z
+        );
+
+        if (primitive_hit) {
+            hit = 1;
+            closest_t = hit_t;
+            closest_primitive_index = i;
+
+            closest_x = hit_x;
+            closest_y = hit_y;
+            closest_z = hit_z;
+
+            closest_normal_x = normal_x;
+            closest_normal_y = normal_y;
+            closest_normal_z = normal_z;
+        }
+    }
+
+    GPUConeTestResult result{};
+
+    result.hit = hit;
+    result.primitive_index = closest_primitive_index;
+    result.t = closest_t;
+
+    result.position_x = closest_x;
+    result.position_y = closest_y;
+    result.position_z = closest_z;
+
+    result.normal_x = closest_normal_x;
+    result.normal_y = closest_normal_y;
+    result.normal_z = closest_normal_z;
+
+    results[index] = result;
+}
+
+__global__ void sphere_intersection_test_kernel(
+    const GPUPrimitive* primitives,
+    const GPUSphereTestInput* tests,
+    GPUSphereTestResult* results,
+    int test_count
+) {
+    int index = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (index >= test_count) {
+        return;
+    }
+
+    const GPUSphereTestInput& test = tests[index];
+
+    float closest_t = test.t_max;
+
+    int hit = 0;
+    int closest_primitive_index = -1;
+
+    float closest_x = 0.0f;
+    float closest_y = 0.0f;
+    float closest_z = 0.0f;
+
+    float closest_normal_x = 0.0f;
+    float closest_normal_y = 0.0f;
+    float closest_normal_z = 0.0f;
+
+    for (int i = 0; i < test.primitive_count; i++) {
+        const GPUPrimitive& primitive = primitives[i];
+
+        float hit_t;
+        float hit_x;
+        float hit_y;
+        float hit_z;
+
+        float normal_x;
+        float normal_y;
+        float normal_z;
+
+        bool primitive_hit = gpu_sphere_hit(
+            primitive,
+            test.ray,
+            test.t_min,
+            closest_t,
+            hit_t,
+            hit_x,
+            hit_y,
+            hit_z,
+            normal_x,
+            normal_y,
+            normal_z
+        );
+
+        if (primitive_hit) {
+            hit = 1;
+            closest_t = hit_t;
+            closest_primitive_index = i;
+
+            closest_x = hit_x;
+            closest_y = hit_y;
+            closest_z = hit_z;
+
+            closest_normal_x = normal_x;
+            closest_normal_y = normal_y;
+            closest_normal_z = normal_z;
+        }
+    }
+
+    GPUSphereTestResult result{};
+
+    result.hit = hit;
+    result.primitive_index = closest_primitive_index;
+    result.t = closest_t;
+
+    result.position_x = closest_x;
+    result.position_y = closest_y;
+    result.position_z = closest_z;
+
+    result.normal_x = closest_normal_x;
+    result.normal_y = closest_normal_y;
+    result.normal_z = closest_normal_z;
+
+    results[index] = result;
+}
+
+__global__ void cone_bvh_intersection_test_kernel(
+    const GPUBvhNode* nodes,
+    const GPUPrimitive* primitives,
+    int node_count,
+    int primitive_count,
+    const GPUConeTestInput* tests,
+    GPUTraversalResult* results,
+    int test_count
+) {
+    const int index = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (index >= test_count) {
+        return;
+    }
+
+    const GPUConeTestInput& test = tests[index];
+
+    results[index] = gpu_bvh_hit(
+        nodes,
+        primitives,
+        node_count,
+        primitive_count,
+        test.ray,
+        test.t_min,
+        test.t_max
+    );
+}
+
 __global__ void compare_bvh_and_linear_kernel(
     const GPUBvhNode* nodes,
     const GPUPrimitive* primitives,
@@ -55,7 +300,7 @@ __global__ void compare_bvh_and_linear_kernel(
     GPUHitComparison* results,
     int ray_count
 ) {
-    int index = blockIdx.x * blockDim.x + threadIdx.x;
+    const int index = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (index >= ray_count) {
         return;
@@ -63,11 +308,8 @@ __global__ void compare_bvh_and_linear_kernel(
 
     const GPURay& ray = rays[index];
 
-    // --------------------------------------------------
     // 1. Intersect using the BVH.
-    // --------------------------------------------------
-
-    GPUTraversalResult bvh_result = gpu_bvh_hit(
+    const GPUTraversalResult bvh_result = gpu_bvh_hit(
         nodes,
         primitives,
         node_count,
@@ -77,10 +319,7 @@ __global__ void compare_bvh_and_linear_kernel(
         1e30f
     );
 
-    // --------------------------------------------------
     // 2. Intersect by scanning every primitive.
-    // --------------------------------------------------
-
     int linear_hit = 0;
     int linear_primitive_index = -1;
 
@@ -94,10 +333,13 @@ __global__ void compare_bvh_and_linear_kernel(
         float hit_y;
         float hit_z;
 
+        float normal_x;
+        float normal_y;
+        float normal_z;
+
         bool primitive_hit = false;
 
         if (primitive.type == GPUPrimitiveType::Quad) {
-
             primitive_hit = gpu_quad_hit(
                 primitive,
                 ray,
@@ -108,14 +350,43 @@ __global__ void compare_bvh_and_linear_kernel(
                 hit_y,
                 hit_z
             );
-
-        } else if (primitive.type == GPUPrimitiveType::Sphere) {
-
-            float normal_x;
-            float normal_y;
-            float normal_z;
-
+        }
+        else if (primitive.type == GPUPrimitiveType::Sphere) {
             primitive_hit = gpu_sphere_hit(
+                primitive,
+                ray,
+                0.001f,
+                linear_t,
+                hit_t,
+                hit_x,
+                hit_y,
+                hit_z,
+                normal_x,
+                normal_y,
+                normal_z
+            );
+        }
+        else if (primitive.type == GPUPrimitiveType::Cone) {
+            primitive_hit = gpu_cone_hit(
+                primitive,
+                ray,
+                0.001f,
+                linear_t,
+                hit_t,
+                hit_x,
+                hit_y,
+                hit_z,
+                normal_x,
+                normal_y,
+                normal_z
+            );
+        }
+        else if (
+            primitive.type == GPUPrimitiveType::Cylinder ||
+            primitive.type == GPUPrimitiveType::Hyperboloid ||
+            primitive.type == GPUPrimitiveType::HyperbolicParaboloid
+        ) {
+            primitive_hit = gpu_quadric_hit(
                 primitive,
                 ray,
                 0.001f,
@@ -137,10 +408,7 @@ __global__ void compare_bvh_and_linear_kernel(
         }
     }
 
-    // --------------------------------------------------
     // 3. Store both results.
-    // --------------------------------------------------
-
     GPUHitComparison comparison{};
 
     comparison.bvh_hit = bvh_result.hit;
@@ -388,6 +656,1266 @@ void compare_gpu_bvh_to_linear(
     );
 }
 
+
+void run_gpu_sphere_intersection_tests() {
+    // --------------------------------------------------
+    // 1. Construct two stationary CPU spheres.
+    // --------------------------------------------------
+
+    auto material_a = make_shared<Lambertian>(
+        Color(0.05, 0.15, 0.65)
+    );
+
+    auto material_b = make_shared<Lambertian>(
+        Color(0.65, 0.45, 0.05)
+    );
+
+    Sphere sphere_a(
+        Point3(0, 0, 0),
+        1.0,
+        material_a
+    );
+
+    Sphere sphere_b(
+        Point3(0, 0, 4),
+        1.0,
+        material_b
+    );
+
+    const Sphere* cpu_spheres[] = {
+        &sphere_a,
+        &sphere_b
+    };
+
+    // --------------------------------------------------
+    // 2. Convert both spheres to GPU primitives.
+    // --------------------------------------------------
+
+    std::vector<GPUPrimitive> host_primitives;
+
+    host_primitives.push_back(
+        convert_sphere_to_gpu(sphere_a, 0)
+    );
+
+    host_primitives.push_back(
+        convert_sphere_to_gpu(sphere_b, 1)
+    );
+
+    // --------------------------------------------------
+    // 3. Construct the test rays.
+    // --------------------------------------------------
+
+    const std::vector<std::string> test_names = {
+        "Front-facing intersection",
+        "Far-side / back-face intersection",
+        "Ray originating inside sphere",
+        "Sphere miss",
+        "Tangent intersection",
+        "Closest hit between two spheres"
+    };
+
+    const std::vector<GPUSphereTestInput> tests = {
+        // Front-facing:
+        // Origin is outside the sphere, approaching its front.
+        {
+            GPURay{
+                0, 0, -3,
+                0, 0, 1
+            },
+            0.001f,
+            100.0f,
+            1
+        },
+
+        // Far-side:
+        // The near root at t=2 is excluded.
+        // The far root at t=4 must be selected.
+        {
+            GPURay{
+                0, 0, -3,
+                0, 0, 1
+            },
+            2.1f,
+            100.0f,
+            1
+        },
+
+        // Origin inside sphere:
+        // The positive root must be selected.
+        {
+            GPURay{
+                0, 0, 0,
+                1, 0, 0
+            },
+            0.001f,
+            100.0f,
+            1
+        },
+
+        // Miss:
+        // The ray passes outside the sphere.
+        {
+            GPURay{
+                0, 0, -3,
+                0, 2, 1
+            },
+            0.001f,
+            100.0f,
+            1
+        },
+
+        // Tangent:
+        // The ray touches the sphere at x=1.
+        {
+            GPURay{
+                1, 0, -3,
+                0, 0, 1
+            },
+            0.001f,
+            100.0f,
+            1
+        },
+
+        // Closest hit:
+        // Both spheres are tested.
+        // Sphere A must be selected before sphere B.
+        {
+            GPURay{
+                0, 0, -3,
+                0, 0, 1
+            },
+            0.001f,
+            100.0f,
+            2
+        }
+    };
+
+    const int test_count = static_cast<int>(tests.size());
+
+    // --------------------------------------------------
+    // 4. Allocate GPU memory.
+    // --------------------------------------------------
+
+    GPUPrimitive* device_primitives = nullptr;
+    GPUSphereTestInput* device_tests = nullptr;
+    GPUSphereTestResult* device_results = nullptr;
+
+    check_cuda(
+        cudaMalloc(
+            reinterpret_cast<void**>(&device_primitives),
+            host_primitives.size() * sizeof(GPUPrimitive)
+        ),
+        "Allocating sphere test primitives"
+    );
+
+    check_cuda(
+        cudaMalloc(
+            reinterpret_cast<void**>(&device_tests),
+            test_count * sizeof(GPUSphereTestInput)
+        ),
+        "Allocating sphere test inputs"
+    );
+
+    check_cuda(
+        cudaMalloc(
+            reinterpret_cast<void**>(&device_results),
+            test_count * sizeof(GPUSphereTestResult)
+        ),
+        "Allocating sphere test results"
+    );
+
+    // --------------------------------------------------
+    // 5. Copy test data to the GPU.
+    // --------------------------------------------------
+
+    check_cuda(
+        cudaMemcpy(
+            device_primitives,
+            host_primitives.data(),
+            host_primitives.size() * sizeof(GPUPrimitive),
+            cudaMemcpyHostToDevice
+        ),
+        "Copying sphere test primitives"
+    );
+
+    check_cuda(
+        cudaMemcpy(
+            device_tests,
+            tests.data(),
+            test_count * sizeof(GPUSphereTestInput),
+            cudaMemcpyHostToDevice
+        ),
+        "Copying sphere test inputs"
+    );
+
+    // --------------------------------------------------
+    // 6. Execute GPU intersection tests.
+    // --------------------------------------------------
+
+    constexpr int threads_per_block = 32;
+
+    const int blocks =
+        (test_count + threads_per_block - 1) /
+        threads_per_block;
+
+    sphere_intersection_test_kernel<<<
+        blocks,
+        threads_per_block
+    >>>(
+        device_primitives,
+        device_tests,
+        device_results,
+        test_count
+    );
+
+    check_cuda(
+        cudaGetLastError(),
+        "Launching sphere intersection test kernel"
+    );
+
+    check_cuda(
+        cudaDeviceSynchronize(),
+        "Executing sphere intersection test kernel"
+    );
+
+    // --------------------------------------------------
+    // 7. Copy GPU results back to the CPU.
+    // --------------------------------------------------
+
+    std::vector<GPUSphereTestResult> gpu_results(
+        test_count
+    );
+
+    check_cuda(
+        cudaMemcpy(
+            gpu_results.data(),
+            device_results,
+            test_count * sizeof(GPUSphereTestResult),
+            cudaMemcpyDeviceToHost
+        ),
+        "Copying sphere intersection results"
+    );
+
+    // --------------------------------------------------
+    // 8. Compare GPU results against CPU intersections.
+    // --------------------------------------------------
+
+    constexpr double tolerance = 1e-4;
+
+    int hit_mismatches = 0;
+    int primitive_mismatches = 0;
+    int distance_mismatches = 0;
+    int position_mismatches = 0;
+    int normal_mismatches = 0;
+
+    std::cout
+        << "\n========================================\n"
+        << "CPU / GPU SPHERE INTERSECTION TEST\n"
+        << "========================================\n";
+
+    for (int i = 0; i < test_count; i++) {
+        const GPUSphereTestInput& test = tests[i];
+        const GPUSphereTestResult& gpu = gpu_results[i];
+
+        // Reconstruct the CPU ray.
+        Point3 origin(
+            test.ray.origin_x,
+            test.ray.origin_y,
+            test.ray.origin_z
+        );
+
+        Vec3 direction(
+            test.ray.direction_x,
+            test.ray.direction_y,
+            test.ray.direction_z
+        );
+
+        Ray cpu_ray(origin, direction);
+
+        // Intersect every requested CPU sphere.
+        bool cpu_hit = false;
+        int cpu_primitive_index = -1;
+
+        real cpu_closest_t = test.t_max;
+
+        HitRecord cpu_record;
+
+        for (int j = 0; j < test.primitive_count; j++) {
+            HitRecord candidate_record;
+
+            if (
+                cpu_spheres[j]->hit(
+                    cpu_ray,
+                    Interval(test.t_min, cpu_closest_t),
+                    candidate_record
+                )
+            ) {
+                cpu_hit = true;
+                cpu_closest_t = candidate_record.t;
+                cpu_primitive_index = j;
+                cpu_record = candidate_record;
+            }
+        }
+
+        bool test_failed = false;
+
+        // Compare hit/miss.
+        if (static_cast<int>(cpu_hit) != gpu.hit) {
+            hit_mismatches++;
+            test_failed = true;
+        }
+
+        // Compare primitive selection.
+        if (cpu_hit && gpu.hit) {
+            if (cpu_primitive_index != gpu.primitive_index) {
+                primitive_mismatches++;
+                test_failed = true;
+            }
+
+            // Compare intersection distance.
+            if (
+                std::fabs(
+                    static_cast<double>(cpu_closest_t) - gpu.t
+                ) > tolerance
+            ) {
+                distance_mismatches++;
+                test_failed = true;
+            }
+
+            // Compare intersection position.
+            if (
+                std::fabs(
+                    static_cast<double>(cpu_record.p.x()) -
+                    gpu.position_x
+                ) > tolerance ||
+                std::fabs(
+                    static_cast<double>(cpu_record.p.y()) -
+                    gpu.position_y
+                ) > tolerance ||
+                std::fabs(
+                    static_cast<double>(cpu_record.p.z()) -
+                    gpu.position_z
+                ) > tolerance
+            ) {
+                position_mismatches++;
+                test_failed = true;
+            }
+
+            // Compare oriented surface normals.
+            if (
+                std::fabs(
+                    static_cast<double>(cpu_record.normal.x()) -
+                    gpu.normal_x
+                ) > tolerance ||
+                std::fabs(
+                    static_cast<double>(cpu_record.normal.y()) -
+                    gpu.normal_y
+                ) > tolerance ||
+                std::fabs(
+                    static_cast<double>(cpu_record.normal.z()) -
+                    gpu.normal_z
+                ) > tolerance
+            ) {
+                normal_mismatches++;
+                test_failed = true;
+            }
+        }
+
+        std::cout
+            << (test_failed ? "[FAIL] " : "[PASS] ")
+            << test_names[i]
+            << '\n';
+
+        if (test_failed) {
+            std::cout
+                << "  CPU hit: " << cpu_hit
+                << "\n  GPU hit: " << gpu.hit
+                << "\n  CPU primitive: "
+                << cpu_primitive_index
+                << "\n  GPU primitive: "
+                << gpu.primitive_index
+                << "\n  CPU t: " << cpu_closest_t
+                << "\n  GPU t: " << gpu.t
+                << '\n';
+        }
+    }
+
+    // --------------------------------------------------
+    // 9. Print comparison summary.
+    // --------------------------------------------------
+
+    const int total_mismatches =
+        hit_mismatches +
+        primitive_mismatches +
+        distance_mismatches +
+        position_mismatches +
+        normal_mismatches;
+
+    std::cout
+        << "\nHit/miss mismatches: "
+        << hit_mismatches
+        << "\nPrimitive mismatches: "
+        << primitive_mismatches
+        << "\nDistance mismatches: "
+        << distance_mismatches
+        << "\nPosition mismatches: "
+        << position_mismatches
+        << "\nNormal mismatches: "
+        << normal_mismatches
+        << "\nTotal mismatches: "
+        << total_mismatches
+        << " / " << test_count
+        << "\n";
+
+    // --------------------------------------------------
+    // 10. Release GPU memory.
+    // --------------------------------------------------
+
+    check_cuda(
+        cudaFree(device_primitives),
+        "Freeing sphere test primitives"
+    );
+
+    check_cuda(
+        cudaFree(device_tests),
+        "Freeing sphere test inputs"
+    );
+
+    check_cuda(
+        cudaFree(device_results),
+        "Freeing sphere test results"
+    );
+
+    if (total_mismatches != 0) {
+        throw std::runtime_error(
+            "CPU/GPU sphere intersection tests failed."
+        );
+    }
+}
+
+void run_gpu_cone_intersection_tests() {
+    // --------------------------------------------------
+    // 1. Construct a CPU Cone.
+    // --------------------------------------------------
+
+    auto cone_material = make_shared<Lambertian>(
+        Color(0.65, 0.15, 0.05)
+    );
+
+    Cone cone(
+        Point3(0, 0, 0),
+        1.0,
+        2.0,
+        cone_material
+    );
+
+    const Cone* cpu_cones[] = {
+        &cone
+    };
+
+    // --------------------------------------------------
+    // 2. Convert the Cone to a GPU primitive.
+    // --------------------------------------------------
+
+    std::vector<GPUPrimitive> host_primitives;
+
+    host_primitives.push_back(
+        convert_cone_to_gpu(cone, 0)
+    );
+
+    // --------------------------------------------------
+    // 3. Construct the test rays.
+    // --------------------------------------------------
+
+    const std::vector<std::string> test_names = {
+        "Front-facing intersection",
+        "Far-side / back-face intersection",
+        "Near root clipped, farther root valid",
+        "Cone miss",
+        "Tangent intersection",
+        "Linear-degenerate intersection"
+    };
+
+    const std::vector<GPUConeTestInput> tests = {
+        // Front-facing:
+        // Cone equation: x^2 + z^2 - 0.25*y^2 = 0.
+        // At y=1 and x=0.5, z = +/-0.5.
+        {
+            GPURay{
+                0.5f, 1.0f, -3.0f,
+                0.0f, 0.0f, 1.0f
+            },
+            0.001f,
+            100.0f,
+            1
+        },
+
+        // Far-side:
+        // Exclude the near root at t=2.5.
+        // The farther root at t=3.5 must be selected.
+        {
+            GPURay{
+                0.5f, 1.0f, -3.0f,
+                0.0f, 0.0f, 1.0f
+            },
+            3.1f,
+            100.0f,
+            1
+        },
+
+        // Clipping:
+        // The nearer root is below the Cone's base.
+        // The farther root is at the top boundary y=2.
+        {
+            GPURay{
+                0.0f, -3.0f, -1.0f,
+                0.0f, 1.0f, 0.4f
+            },
+            0.001f,
+            100.0f,
+            1
+        },
+
+        // Miss:
+        // The ray passes outside the Cone.
+        {
+            GPURay{
+                2.0f, 1.0f, -3.0f,
+                0.0f, 0.0f, 1.0f
+            },
+            0.001f,
+            100.0f,
+            1
+        },
+
+        // Tangent:
+        // At x=1 and y=2, the ray touches the Cone at z=0.
+        {
+            GPURay{
+                1.0f, 2.0f, -3.0f,
+                0.0f, 0.0f, 1.0f
+            },
+            0.001f,
+            100.0f,
+            1
+        },
+
+        // Linear-degenerate:
+        // a = dx^2 + dz^2 - 0.25*dy^2
+        //   = 0.25 - 0.25
+        //   = 0
+        //
+        // The resulting linear equation has t=1.5.
+        {
+            GPURay{
+                -1.0f, -1.0f, 0.0f,
+                0.5f, 1.0f, 0.0f
+            },
+            0.001f,
+            100.0f,
+            1
+        }
+    };
+
+    const int test_count = static_cast<int>(tests.size());
+
+    // --------------------------------------------------
+    // 4. Allocate GPU memory.
+    // --------------------------------------------------
+
+    GPUPrimitive* device_primitives = nullptr;
+    GPUConeTestInput* device_tests = nullptr;
+    GPUConeTestResult* device_results = nullptr;
+
+    check_cuda(
+        cudaMalloc(
+            reinterpret_cast<void**>(&device_primitives),
+            host_primitives.size() * sizeof(GPUPrimitive)
+        ),
+        "Allocating Cone test primitives"
+    );
+
+    check_cuda(
+        cudaMalloc(
+            reinterpret_cast<void**>(&device_tests),
+            test_count * sizeof(GPUConeTestInput)
+        ),
+        "Allocating Cone test inputs"
+    );
+
+    check_cuda(
+        cudaMalloc(
+            reinterpret_cast<void**>(&device_results),
+            test_count * sizeof(GPUConeTestResult)
+        ),
+        "Allocating Cone test results"
+    );
+
+    // --------------------------------------------------
+    // 5. Copy test data to the GPU.
+    // --------------------------------------------------
+
+    check_cuda(
+        cudaMemcpy(
+            device_primitives,
+            host_primitives.data(),
+            host_primitives.size() * sizeof(GPUPrimitive),
+            cudaMemcpyHostToDevice
+        ),
+        "Copying Cone test primitives"
+    );
+
+    check_cuda(
+        cudaMemcpy(
+            device_tests,
+            tests.data(),
+            test_count * sizeof(GPUConeTestInput),
+            cudaMemcpyHostToDevice
+        ),
+        "Copying Cone test inputs"
+    );
+
+    // --------------------------------------------------
+    // 6. Execute GPU intersection tests.
+    // --------------------------------------------------
+
+    constexpr int threads_per_block = 32;
+
+    const int blocks =
+        (test_count + threads_per_block - 1) /
+        threads_per_block;
+
+    cone_intersection_test_kernel<<<
+        blocks,
+        threads_per_block
+    >>>(
+        device_primitives,
+        device_tests,
+        device_results,
+        test_count
+    );
+
+    check_cuda(
+        cudaGetLastError(),
+        "Launching Cone intersection test kernel"
+    );
+
+    check_cuda(
+        cudaDeviceSynchronize(),
+        "Executing Cone intersection test kernel"
+    );
+
+    // --------------------------------------------------
+    // 7. Copy GPU results back to the CPU.
+    // --------------------------------------------------
+
+    std::vector<GPUConeTestResult> gpu_results(
+        test_count
+    );
+
+    check_cuda(
+        cudaMemcpy(
+            gpu_results.data(),
+            device_results,
+            test_count * sizeof(GPUConeTestResult),
+            cudaMemcpyDeviceToHost
+        ),
+        "Copying Cone intersection results"
+    );
+
+    // --------------------------------------------------
+    // 8. Compare GPU results against CPU intersections.
+    // --------------------------------------------------
+
+    constexpr double tolerance = 1e-4;
+
+    int hit_mismatches = 0;
+    int primitive_mismatches = 0;
+    int distance_mismatches = 0;
+    int position_mismatches = 0;
+    int normal_mismatches = 0;
+
+    std::cout
+        << "\n========================================\n"
+        << "CPU / GPU CONE INTERSECTION TEST\n"
+        << "========================================\n";
+
+    for (int i = 0; i < test_count; i++) {
+        const GPUConeTestInput& test = tests[i];
+        const GPUConeTestResult& gpu = gpu_results[i];
+
+        Point3 origin(
+            test.ray.origin_x,
+            test.ray.origin_y,
+            test.ray.origin_z
+        );
+
+        Vec3 direction(
+            test.ray.direction_x,
+            test.ray.direction_y,
+            test.ray.direction_z
+        );
+
+        Ray cpu_ray(origin, direction);
+
+        bool cpu_hit = false;
+        int cpu_primitive_index = -1;
+
+        real cpu_closest_t = test.t_max;
+
+        HitRecord cpu_record;
+
+        for (int j = 0; j < test.primitive_count; j++) {
+            HitRecord candidate_record;
+
+            if (
+                cpu_cones[j]->hit(
+                    cpu_ray,
+                    Interval(test.t_min, cpu_closest_t),
+                    candidate_record
+                )
+            ) {
+                cpu_hit = true;
+                cpu_closest_t = candidate_record.t;
+                cpu_primitive_index = j;
+                cpu_record = candidate_record;
+            }
+        }
+
+        bool test_failed = false;
+
+        if (static_cast<int>(cpu_hit) != gpu.hit) {
+            hit_mismatches++;
+            test_failed = true;
+        }
+
+        if (cpu_hit && gpu.hit) {
+            if (cpu_primitive_index != gpu.primitive_index) {
+                primitive_mismatches++;
+                test_failed = true;
+            }
+
+            if (
+                std::fabs(
+                    static_cast<double>(cpu_closest_t) - gpu.t
+                ) > tolerance
+            ) {
+                distance_mismatches++;
+                test_failed = true;
+            }
+
+            if (
+                std::fabs(
+                    static_cast<double>(cpu_record.p.x()) -
+                    gpu.position_x
+                ) > tolerance ||
+                std::fabs(
+                    static_cast<double>(cpu_record.p.y()) -
+                    gpu.position_y
+                ) > tolerance ||
+                std::fabs(
+                    static_cast<double>(cpu_record.p.z()) -
+                    gpu.position_z
+                ) > tolerance
+            ) {
+                position_mismatches++;
+                test_failed = true;
+            }
+
+            if (
+                std::fabs(
+                    static_cast<double>(cpu_record.normal.x()) -
+                    gpu.normal_x
+                ) > tolerance ||
+                std::fabs(
+                    static_cast<double>(cpu_record.normal.y()) -
+                    gpu.normal_y
+                ) > tolerance ||
+                std::fabs(
+                    static_cast<double>(cpu_record.normal.z()) -
+                    gpu.normal_z
+                ) > tolerance
+            ) {
+                normal_mismatches++;
+                test_failed = true;
+            }
+        }
+
+        std::cout
+            << (test_failed ? "[FAIL] " : "[PASS] ")
+            << test_names[i]
+            << '\n';
+
+        if (test_failed) {
+            std::cout
+                << "  CPU hit: " << cpu_hit
+                << "\n  GPU hit: " << gpu.hit
+                << "\n  CPU primitive: "
+                << cpu_primitive_index
+                << "\n  GPU primitive: "
+                << gpu.primitive_index
+                << "\n  CPU t: " << cpu_closest_t
+                << "\n  GPU t: " << gpu.t
+                << '\n';
+
+            if (cpu_hit && gpu.hit) {
+                std::cout
+                    << "  CPU position: "
+                    << cpu_record.p.x() << ", "
+                    << cpu_record.p.y() << ", "
+                    << cpu_record.p.z()
+                    << "\n  GPU position: "
+                    << gpu.position_x << ", "
+                    << gpu.position_y << ", "
+                    << gpu.position_z
+                    << "\n  CPU normal: "
+                    << cpu_record.normal.x() << ", "
+                    << cpu_record.normal.y() << ", "
+                    << cpu_record.normal.z()
+                    << "\n  GPU normal: "
+                    << gpu.normal_x << ", "
+                    << gpu.normal_y << ", "
+                    << gpu.normal_z
+                    << '\n';
+            }
+        }
+    }
+
+    // --------------------------------------------------
+    // 9. Print comparison summary.
+    // --------------------------------------------------
+
+    const int total_mismatches =
+        hit_mismatches +
+        primitive_mismatches +
+        distance_mismatches +
+        position_mismatches +
+        normal_mismatches;
+
+    std::cout
+        << "\nHit/miss mismatches: "
+        << hit_mismatches
+        << "\nPrimitive mismatches: "
+        << primitive_mismatches
+        << "\nDistance mismatches: "
+        << distance_mismatches
+        << "\nPosition mismatches: "
+        << position_mismatches
+        << "\nNormal mismatches: "
+        << normal_mismatches
+        << "\nTotal mismatches: "
+        << total_mismatches
+        << " / " << test_count
+        << '\n';
+
+    // --------------------------------------------------
+    // 10. Release GPU memory.
+    // --------------------------------------------------
+
+    check_cuda(
+        cudaFree(device_primitives),
+        "Freeing Cone test primitives"
+    );
+
+    check_cuda(
+        cudaFree(device_tests),
+        "Freeing Cone test inputs"
+    );
+
+    check_cuda(
+        cudaFree(device_results),
+        "Freeing Cone test results"
+    );
+
+    if (total_mismatches != 0) {
+        throw std::runtime_error(
+            "CPU/GPU Cone intersection tests failed."
+        );
+    }
+}
+
+void run_gpu_cone_bvh_intersection_tests() {
+    // --------------------------------------------------
+    // 1. Construct an isolated CPU Cone scene.
+    // --------------------------------------------------
+
+    auto cone_material = make_shared<Lambertian>(
+        Color(0.65, 0.15, 0.05)
+    );
+
+    auto cone = make_shared<Cone>(
+        Point3(180, 0, 300),
+        60.0,
+        120.0,
+        cone_material
+    );
+
+    HittableList cone_world;
+    cone_world.add(cone);
+
+    // --------------------------------------------------
+    // 2. Build a GPU BVH containing only this Cone.
+    // --------------------------------------------------
+
+    GPUScene host_scene = build_gpu_scene_from_list(cone_world);
+
+    if (host_scene.primitives.size() != 1) {
+        throw std::runtime_error(
+            "Expected exactly one Cone in the isolated BVH test scene."
+        );
+    }
+
+    GPUDeviceScene device_scene = upload_gpu_scene(host_scene);
+
+    // --------------------------------------------------
+    // 3. Construct targeted rays.
+    //
+    // The original direct-test rays are scaled by 60
+    // and translated to the Cone's world-space position.
+    // --------------------------------------------------
+
+    const std::vector<std::string> test_names = {
+        "Front-facing intersection through BVH",
+        "Far-side intersection through BVH",
+        "Near root clipped, farther root valid through BVH",
+        "Cone miss through BVH",
+        "Tangent intersection through BVH",
+        "Linear-degenerate intersection through BVH"
+    };
+
+    const std::vector<GPUConeTestInput> tests = {
+        // Front-facing:
+        {
+            GPURay{
+                210.0f, 60.0f, 120.0f,
+                0.0f, 0.0f, 1.0f
+            },
+            0.001f,
+            1000.0f,
+            1
+        },
+
+        // Far-side:
+        // Near intersection is t=150.
+        // Far intersection is t=210.
+        {
+            GPURay{
+                210.0f, 60.0f, 120.0f,
+                0.0f, 0.0f, 1.0f
+            },
+            186.0f,
+            1000.0f,
+            1
+        },
+
+        // Near root is below the Cone's base.
+        // Far root is at the Cone's top boundary.
+        {
+            GPURay{
+                180.0f, -180.0f, 240.0f,
+                0.0f, 1.0f, 0.4f
+            },
+            0.001f,
+            1000.0f,
+            1
+        },
+
+        // Miss:
+        // This ray is outside the Cone's bounding box.
+        {
+            GPURay{
+                300.0f, 60.0f, 120.0f,
+                0.0f, 0.0f, 1.0f
+            },
+            0.001f,
+            1000.0f,
+            1
+        },
+
+        // Tangent intersection at the upper edge.
+        {
+            GPURay{
+                240.0f, 120.0f, 120.0f,
+                0.0f, 0.0f, 1.0f
+            },
+            0.001f,
+            1000.0f,
+            1
+        },
+
+        // Linear-degenerate intersection.
+        {
+            GPURay{
+                120.0f, -60.0f, 300.0f,
+                0.5f, 1.0f, 0.0f
+            },
+            0.001f,
+            1000.0f,
+            1
+        }
+    };
+
+    const int test_count = static_cast<int>(tests.size());
+
+    // --------------------------------------------------
+    // 4. Allocate GPU test memory.
+    // --------------------------------------------------
+
+    GPUConeTestInput* device_tests = nullptr;
+    GPUTraversalResult* device_results = nullptr;
+
+    check_cuda(
+        cudaMalloc(
+            reinterpret_cast<void**>(&device_tests),
+            test_count * sizeof(GPUConeTestInput)
+        ),
+        "Allocating Cone BVH test inputs"
+    );
+
+    check_cuda(
+        cudaMalloc(
+            reinterpret_cast<void**>(&device_results),
+            test_count * sizeof(GPUTraversalResult)
+        ),
+        "Allocating Cone BVH test results"
+    );
+
+    // --------------------------------------------------
+    // 5. Copy test inputs to the GPU.
+    // --------------------------------------------------
+
+    check_cuda(
+        cudaMemcpy(
+            device_tests,
+            tests.data(),
+            test_count * sizeof(GPUConeTestInput),
+            cudaMemcpyHostToDevice
+        ),
+        "Copying Cone BVH test inputs"
+    );
+
+    // --------------------------------------------------
+    // 6. Execute the GPU BVH tests.
+    // --------------------------------------------------
+
+    constexpr int threads_per_block = 32;
+
+    const int blocks =
+        (test_count + threads_per_block - 1) /
+        threads_per_block;
+
+    cone_bvh_intersection_test_kernel<<<
+        blocks,
+        threads_per_block
+    >>>(
+        device_scene.bvh_nodes,
+        device_scene.primitives,
+        static_cast<int>(device_scene.bvh_node_count),
+        static_cast<int>(device_scene.primitive_count),
+        device_tests,
+        device_results,
+        test_count
+    );
+
+    check_cuda(
+        cudaGetLastError(),
+        "Launching Cone BVH intersection tests"
+    );
+
+    check_cuda(
+        cudaDeviceSynchronize(),
+        "Executing Cone BVH intersection tests"
+    );
+
+    // --------------------------------------------------
+    // 7. Copy GPU results back to the CPU.
+    // --------------------------------------------------
+
+    std::vector<GPUTraversalResult> gpu_results(test_count);
+
+    check_cuda(
+        cudaMemcpy(
+            gpu_results.data(),
+            device_results,
+            test_count * sizeof(GPUTraversalResult),
+            cudaMemcpyDeviceToHost
+        ),
+        "Copying Cone BVH test results"
+    );
+
+    // --------------------------------------------------
+    // 8. Compare BVH results against CPU intersections.
+    // --------------------------------------------------
+
+    constexpr double tolerance = 1e-4;
+
+    int hit_mismatches = 0;
+    int primitive_mismatches = 0;
+    int distance_mismatches = 0;
+    int position_mismatches = 0;
+    int normal_mismatches = 0;
+    int stack_overflows = 0;
+
+    std::cout
+        << "\n========================================\n"
+        << "CPU / GPU CONE BVH INTERSECTION TEST\n"
+        << "========================================\n";
+
+    for (int i = 0; i < test_count; i++) {
+        const GPUConeTestInput& test = tests[i];
+        const GPUTraversalResult& gpu = gpu_results[i];
+
+        Point3 origin(
+            test.ray.origin_x,
+            test.ray.origin_y,
+            test.ray.origin_z
+        );
+
+        Vec3 direction(
+            test.ray.direction_x,
+            test.ray.direction_y,
+            test.ray.direction_z
+        );
+
+        Ray cpu_ray(origin, direction);
+
+        HitRecord cpu_record;
+
+        const bool cpu_hit = cone_world.hit(
+            cpu_ray,
+            Interval(test.t_min, test.t_max),
+            cpu_record
+        );
+
+        bool test_failed = false;
+
+        if (static_cast<int>(cpu_hit) != gpu.hit) {
+            hit_mismatches++;
+            test_failed = true;
+        }
+
+        if (gpu.stack_overflow) {
+            stack_overflows++;
+            test_failed = true;
+        }
+
+        if (cpu_hit && gpu.hit) {
+            // The isolated BVH contains exactly one primitive.
+            if (gpu.primitive_index < 0) {
+                primitive_mismatches++;
+                test_failed = true;
+            }
+
+            if (
+                std::fabs(
+                    static_cast<double>(cpu_record.t) - gpu.t
+                ) > tolerance
+            ) {
+                distance_mismatches++;
+                test_failed = true;
+            }
+
+            if (
+                std::fabs(
+                    static_cast<double>(cpu_record.p.x()) -
+                    gpu.position_x
+                ) > tolerance ||
+                std::fabs(
+                    static_cast<double>(cpu_record.p.y()) -
+                    gpu.position_y
+                ) > tolerance ||
+                std::fabs(
+                    static_cast<double>(cpu_record.p.z()) -
+                    gpu.position_z
+                ) > tolerance
+            ) {
+                position_mismatches++;
+                test_failed = true;
+            }
+
+            if (
+                std::fabs(
+                    static_cast<double>(cpu_record.normal.x()) -
+                    gpu.normal_x
+                ) > tolerance ||
+                std::fabs(
+                    static_cast<double>(cpu_record.normal.y()) -
+                    gpu.normal_y
+                ) > tolerance ||
+                std::fabs(
+                    static_cast<double>(cpu_record.normal.z()) -
+                    gpu.normal_z
+                ) > tolerance
+            ) {
+                normal_mismatches++;
+                test_failed = true;
+            }
+        }
+
+        std::cout
+            << (test_failed ? "[FAIL] " : "[PASS] ")
+            << test_names[i]
+            << '\n';
+
+        if (test_failed) {
+            std::cout
+                << "  CPU hit: " << cpu_hit
+                << "\n  GPU hit: " << gpu.hit
+                << "\n  GPU primitive: " << gpu.primitive_index
+                << "\n  CPU t: "
+                << (cpu_hit ? cpu_record.t : -1.0)
+                << "\n  GPU t: " << gpu.t
+                << "\n  Stack overflow: " << gpu.stack_overflow
+                << '\n';
+        }
+    }
+
+    // --------------------------------------------------
+    // 9. Print test summary.
+    // --------------------------------------------------
+
+    const int total_mismatches =
+        hit_mismatches +
+        primitive_mismatches +
+        distance_mismatches +
+        position_mismatches +
+        normal_mismatches +
+        stack_overflows;
+
+    std::cout
+        << "\nHit/miss mismatches: " << hit_mismatches
+        << "\nPrimitive mismatches: " << primitive_mismatches
+        << "\nDistance mismatches: " << distance_mismatches
+        << "\nPosition mismatches: " << position_mismatches
+        << "\nNormal mismatches: " << normal_mismatches
+        << "\nBVH stack overflows: " << stack_overflows
+        << "\nTotal mismatches: "
+        << total_mismatches << " / " << test_count
+        << '\n';
+
+    // --------------------------------------------------
+    // 10. Release GPU resources.
+    // --------------------------------------------------
+
+    check_cuda(
+        cudaFree(device_tests),
+        "Freeing Cone BVH test inputs"
+    );
+
+    check_cuda(
+        cudaFree(device_results),
+        "Freeing Cone BVH test results"
+    );
+
+    free_gpu_scene(device_scene);
+
+    if (total_mismatches != 0) {
+        throw std::runtime_error(
+            "CPU/GPU Cone BVH intersection tests failed."
+        );
+    }
+}
+
 int main() {
     GPUDeviceScene device_scene{};
     GPUColor* device_pixels = nullptr;
@@ -423,6 +1951,19 @@ int main() {
 
         HittableList world;
         HittableList lights;
+
+        auto cone_material = make_shared<Lambertian>(
+            Color(0.65, 0.15, 0.05)
+        );
+
+        auto cone = make_shared<Cone>(
+            Point3(180, 0, 300),
+            60.0,
+            120.0,
+            cone_material
+        );
+
+        world.add(cone);
 
         world.add(make_shared<Quad>(
             Point3(555, 0, 0),
@@ -533,9 +2074,9 @@ int main() {
         GPUScene host_scene =
             build_gpu_scene_from_list(world);
 
-        if (host_scene.primitives.size() != 8) {
+        if (host_scene.primitives.size() != 9) {
             throw std::runtime_error(
-                "Expected exactly eight GPU primitives: "
+                "Expected exactly nine GPU primitives: "
                 "six Quads and two Spheres."
             );
         }
@@ -598,6 +2139,18 @@ int main() {
         std::cout << "\nTesting GPU BVH against linear intersection...\n";
 
         compare_gpu_bvh_to_linear(device_scene);
+
+        std::cout << "\nTesting CPU/GPU sphere intersections...\n";
+
+        run_gpu_sphere_intersection_tests();
+        
+        std::cout << "\nTesting CPU/GPU Cone intersections...\n";
+
+        std::cout << "\nTesting CPU/GPU Cone BVH intersections...\n";
+
+        run_gpu_cone_bvh_intersection_tests();
+
+        run_gpu_cone_intersection_tests();
 
         GPUCamera gpu_camera =
             build_gpu_camera(camera);

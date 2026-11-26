@@ -12,6 +12,7 @@
 #include "sphere.h"
 #include "hittable_list.h"
 #include "gpu_bvh_builder.h"
+#include "quadrics.h"
 
 inline Color get_solid_texture_color(
     const shared_ptr<Texture>& texture
@@ -283,6 +284,161 @@ inline GPUPrimitive convert_sphere_to_gpu(
     return primitive;
 }
 
+// Converts a CPU Cone into GPU-compatible primitive data.
+inline GPUPrimitive convert_cone_to_gpu(
+    const Cone& cone,
+    int material_index
+) {
+    GPUPrimitive primitive{};
+
+    primitive.type = GPUPrimitiveType::Cone;
+
+    Aabb bbox = cone.bounding_box();
+
+    primitive.min_x = static_cast<float>(bbox.x.min);
+    primitive.min_y = static_cast<float>(bbox.y.min);
+    primitive.min_z = static_cast<float>(bbox.z.min);
+
+    primitive.max_x = static_cast<float>(bbox.x.max);
+    primitive.max_y = static_cast<float>(bbox.y.max);
+    primitive.max_z = static_cast<float>(bbox.z.max);
+
+    const Point3& center = cone.get_center();
+
+    // Center
+    primitive.parameters[0] =
+        static_cast<float>(center.x());
+
+    primitive.parameters[1] =
+        static_cast<float>(center.y());
+
+    primitive.parameters[2] =
+        static_cast<float>(center.z());
+
+    // Cone dimensions
+    primitive.parameters[3] =
+        static_cast<float>(cone.get_radius());
+
+    primitive.parameters[4] =
+        static_cast<float>(cone.get_height());
+
+    // Radius-to-height ratio
+    primitive.parameters[5] =
+        static_cast<float>(cone.get_k());
+
+    primitive.material_index = material_index;
+
+    return primitive;
+}
+
+inline GPUPrimitive convert_cylinder_to_gpu(
+    const Cylinder& cylinder,
+    int material_index
+) {
+    GPUPrimitive primitive{};
+
+    primitive.type = GPUPrimitiveType::Cylinder;
+
+    const Aabb bbox = cylinder.bounding_box();
+
+    primitive.min_x = static_cast<float>(bbox.x.min);
+    primitive.min_y = static_cast<float>(bbox.y.min);
+    primitive.min_z = static_cast<float>(bbox.z.min);
+
+    primitive.max_x = static_cast<float>(bbox.x.max);
+    primitive.max_y = static_cast<float>(bbox.y.max);
+    primitive.max_z = static_cast<float>(bbox.z.max);
+
+    const Point3& center = cylinder.get_center();
+
+    primitive.parameters[0] = static_cast<float>(center.x());
+    primitive.parameters[1] = static_cast<float>(center.y());
+    primitive.parameters[2] = static_cast<float>(center.z());
+
+    primitive.parameters[3] =
+        static_cast<float>(cylinder.get_radius());
+
+    primitive.parameters[4] =
+        static_cast<float>(cylinder.get_height());
+
+    primitive.material_index = material_index;
+
+    return primitive;
+}
+
+inline GPUPrimitive convert_hyperboloid_to_gpu(
+    const Hyperboloid& hyperboloid,
+    int material_index
+) {
+    GPUPrimitive primitive{};
+
+    primitive.type = GPUPrimitiveType::Hyperboloid;
+
+    const Aabb bbox = hyperboloid.bounding_box();
+
+    primitive.min_x = static_cast<float>(bbox.x.min);
+    primitive.min_y = static_cast<float>(bbox.y.min);
+    primitive.min_z = static_cast<float>(bbox.z.min);
+
+    primitive.max_x = static_cast<float>(bbox.x.max);
+    primitive.max_y = static_cast<float>(bbox.y.max);
+    primitive.max_z = static_cast<float>(bbox.z.max);
+
+    const Point3& center = hyperboloid.get_center();
+
+    primitive.parameters[0] = static_cast<float>(center.x());
+    primitive.parameters[1] = static_cast<float>(center.y());
+    primitive.parameters[2] = static_cast<float>(center.z());
+
+    primitive.parameters[3] =
+        static_cast<float>(hyperboloid.get_throat_radius());
+
+    primitive.parameters[4] =
+        static_cast<float>(hyperboloid.get_height());
+
+    primitive.parameters[5] =
+        static_cast<float>(hyperboloid.get_flare());
+
+    primitive.material_index = material_index;
+
+    return primitive;
+}
+
+inline GPUPrimitive convert_hyperbolic_paraboloid_to_gpu(
+    const HyperbolicParaboloid& surface,
+    int material_index
+) {
+    GPUPrimitive primitive{};
+
+    primitive.type = GPUPrimitiveType::HyperbolicParaboloid;
+
+    const Aabb bbox = surface.bounding_box();
+
+    primitive.min_x = static_cast<float>(bbox.x.min);
+    primitive.min_y = static_cast<float>(bbox.y.min);
+    primitive.min_z = static_cast<float>(bbox.z.min);
+
+    primitive.max_x = static_cast<float>(bbox.x.max);
+    primitive.max_y = static_cast<float>(bbox.y.max);
+    primitive.max_z = static_cast<float>(bbox.z.max);
+
+    const Point3& center = surface.get_center();
+
+    primitive.parameters[0] = static_cast<float>(center.x());
+    primitive.parameters[1] = static_cast<float>(center.y());
+    primitive.parameters[2] = static_cast<float>(center.z());
+
+    primitive.parameters[3] =
+        static_cast<float>(surface.get_size());
+
+    primitive.parameters[4] =
+        static_cast<float>(surface.get_height());
+
+    primitive.material_index = material_index;
+
+    return primitive;
+}
+
 inline GPUPrimitive add_sphere_to_gpu_scene(
     GPUScene& scene,
     const Sphere& sphere
@@ -294,6 +450,66 @@ inline GPUPrimitive add_sphere_to_gpu_scene(
 
     return convert_sphere_to_gpu(
         sphere,
+        material_index
+    );
+}
+
+inline GPUPrimitive add_cone_to_gpu_scene(
+    GPUScene& scene,
+    const Cone& cone
+) {
+    int material_index = add_material_to_gpu_scene(
+        scene,
+        cone.get_material()
+    );
+
+    return convert_cone_to_gpu(
+        cone,
+        material_index
+    );
+}
+
+inline GPUPrimitive add_cylinder_to_gpu_scene(
+    GPUScene& scene,
+    const Cylinder& cylinder
+) {
+    const int material_index = add_material_to_gpu_scene(
+        scene,
+        cylinder.get_material()
+    );
+
+    return convert_cylinder_to_gpu(
+        cylinder,
+        material_index
+    );
+}
+
+inline GPUPrimitive add_hyperboloid_to_gpu_scene(
+    GPUScene& scene,
+    const Hyperboloid& hyperboloid
+) {
+    const int material_index = add_material_to_gpu_scene(
+        scene,
+        hyperboloid.get_material()
+    );
+
+    return convert_hyperboloid_to_gpu(
+        hyperboloid,
+        material_index
+    );
+}
+
+inline GPUPrimitive add_hyperbolic_paraboloid_to_gpu_scene(
+    GPUScene& scene,
+    const HyperbolicParaboloid& surface
+) {
+    const int material_index = add_material_to_gpu_scene(
+        scene,
+        surface.get_material()
+    );
+
+    return convert_hyperbolic_paraboloid_to_gpu(
+        surface,
         material_index
     );
 }
@@ -336,10 +552,41 @@ inline GPUScene build_gpu_scene_from_list(
                 *sphere
             );
 
+        } else if (auto cone =
+            std::dynamic_pointer_cast<Cone>(object)) {
+
+            primitive = add_cone_to_gpu_scene(
+                scene,
+                *cone
+            );
+
+        } else if (auto cylinder =
+            std::dynamic_pointer_cast<Cylinder>(object)) {
+
+            primitive = add_cylinder_to_gpu_scene(
+                scene,
+                *cylinder
+            );
+
+        } else if (auto hyperboloid =
+            std::dynamic_pointer_cast<Hyperboloid>(object)) {
+
+            primitive = add_hyperboloid_to_gpu_scene(
+                scene,
+                *hyperboloid
+            );
+
+        } else if (auto hyperbolic_paraboloid =
+            std::dynamic_pointer_cast<HyperbolicParaboloid>(object)) {
+
+            primitive = add_hyperbolic_paraboloid_to_gpu_scene(
+                scene,
+                *hyperbolic_paraboloid
+            );
+
         } else {
             throw std::runtime_error(
-                "GPU scene builder currently only supports "
-                "Quad and Sphere objects."
+                "GPU scene builder currently does not support this object type."
             );
         }
 

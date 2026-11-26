@@ -28,44 +28,71 @@ class Quadric : public Hittable {
     public:
         Quadric(shared_ptr<Material> mat) : mat(mat)  {}
 
+        const shared_ptr<Material>& get_material() const {
+            return mat;
+        }
+
         bool hit(const Ray& r, Interval ray_t, HitRecord& rec) const override {
-            real a, b, c;
-            if (!solve_coefficients(r, a, b, c)) return false;
+            real a;
+            real b;
+            real c;
 
-            real discriminant = b * b - 4.0 * a * c;
-            if (discriminant < 0.0) return false;
-
-            real sqrtd = std::sqrt(discriminant);
-
-            // try nearest root
-            real root = (-1 * b - sqrtd) / (2.0 * a);
-            if (ray_t.surrounds(root)) {
-                Point3 p = r.at(root);
-                if (clipping_check(p, root)) {
-                    rec.t = root;
-                    rec.p = p;
-                    Vec3 outward_normal = compute_normal(p);
-                    rec.set_face_normal(r, outward_normal);
-                    rec.mat = mat;
-                    return true;
-                }
+            if (!solve_coefficients(r, a, b, c)) {
+                return false;
             }
 
-            // try second root
-            root = (-1 * b + sqrtd) / (2.0 * a);
-            if (ray_t.surrounds(root)) {
-                Point3 p = r.at(root);
-                if (clipping_check(p, root)) {
-                    rec.t = root;
-                    rec.p = p;
-                    Vec3 outward_normal = compute_normal(p);
-                    rec.set_face_normal(r, outward_normal);
-                    rec.mat = mat;
-                    return true;
+            // Test a candidate root, including the quadric's clipping.
+            auto try_root = [&](real root) -> bool {
+                if (!ray_t.surrounds(root)) {
+                    return false;
                 }
+
+                Point3 p = r.at(root);
+
+                if (!clipping_check(p, root)) {
+                    return false;
+                }
+
+                rec.t = root;
+                rec.p = p;
+
+                Vec3 outward_normal = compute_normal(p);
+
+                rec.set_face_normal(r, outward_normal);
+                rec.mat = mat;
+
+                return true;
+            };
+
+            // Handle the linear case: b*t + c = 0.
+            if (a == 0.0) {
+                if (b == 0.0) {
+                    return false;
+                }
+
+                return try_root(-c / b);
             }
 
-            return false;
+            const real discriminant = b * b - 4.0 * a * c;
+
+            if (discriminant < 0.0) {
+                return false;
+            }
+
+            const real sqrt_discriminant = sqrt(discriminant);
+
+            // Try the nearer root first, then the farther root.
+            const real first_root =
+                (-b - sqrt_discriminant) / (2.0 * a);
+
+            if (try_root(first_root)) {
+                return true;
+            }
+
+            const real second_root =
+                (-b + sqrt_discriminant) / (2.0 * a);
+
+            return try_root(second_root);
         }
 
         Aabb bounding_box() const override { return bbox; }
@@ -133,6 +160,22 @@ class Cone : public Quadric {
             bbox = Aabb(min_point, max_point);
         }
 
+        const Point3& get_center() const {
+            return center;
+        }
+
+        real get_radius() const {
+            return radius;
+        }
+
+        real get_height() const {
+            return height;
+        }
+
+        real get_k() const {
+            return k;
+        }
+
         Aabb bounding_box() const override { return bbox; }
 };
 
@@ -187,6 +230,18 @@ class Cylinder : public Quadric {
             Point3 min_point = center - Vec3(radius, 0.0, radius);
             Point3 max_point = center + Vec3(radius, height, radius);
             bbox = Aabb(min_point, max_point);
+        }
+
+        const Point3& get_center() const {
+            return center;
+        }
+
+        real get_radius() const {
+            return radius;
+        }
+
+        real get_height() const {
+            return height;
         }
 
         Aabb bounding_box() const override { return bbox; }
@@ -257,6 +312,22 @@ class Hyperboloid : public Quadric {
             Point3 max_point = center + Vec3(max_radius, half_h, max_radius);
             bbox = Aabb(min_point, max_point);
         }
+
+        const Point3& get_center() const {
+            return center;
+        }
+
+        real get_throat_radius() const {
+            return throat_radius;
+        }
+
+        real get_height() const {
+            return height;
+        }
+
+        real get_flare() const {
+            return flare;
+        }
 };
 
 class HyperbolicParaboloid : public Quadric {
@@ -309,6 +380,18 @@ class HyperbolicParaboloid : public Quadric {
             Point3 min_point = center - Vec3(size, max_y, size);
             Point3 max_point = center + Vec3(size, max_y, size);
             bbox = Aabb(min_point, max_point);
+        }
+
+        const Point3& get_center() const {
+            return center;
+        }
+
+        real get_size() const {
+            return size;
+        }
+
+        real get_height() const {
+            return height;
         }
 };
 

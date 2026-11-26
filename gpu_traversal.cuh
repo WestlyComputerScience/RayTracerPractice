@@ -220,7 +220,7 @@ __device__ bool gpu_sphere_hit(
         ray.direction_y * ny +
         ray.direction_z * nz;
 
-    if (direction_dot_normal > 0.0f) {
+    if (direction_dot_normal >= 0.0f) {
         nx = -nx;
         ny = -ny;
         nz = -nz;
@@ -239,8 +239,531 @@ __device__ bool gpu_sphere_hit(
     return true;
 }
 
-// Traverses the flattened GPU BVH and finds the closest quad hit.
-// Traverses the flattened GPU BVH and finds the closest quad or sphere hit.
+// Tests a candidate Cone intersection root, including clipping
+// and the oriented surface normal.
+__device__ bool gpu_cone_test_root(
+    const GPUPrimitive& primitive,
+    const GPURay& ray,
+    float ray_t_min,
+    float ray_t_max,
+    float t,
+    float& hit_t,
+    float& hit_x,
+    float& hit_y,
+    float& hit_z,
+    float& normal_x,
+    float& normal_y,
+    float& normal_z
+) {
+    // Match CPU Interval::surrounds(): exclude both endpoints.
+    if (t <= ray_t_min || t >= ray_t_max) {
+        return false;
+    }
+
+    const float center_x = primitive.parameters[0];
+    const float center_y = primitive.parameters[1];
+    const float center_z = primitive.parameters[2];
+
+    const float height = primitive.parameters[4];
+    const float k = primitive.parameters[5];
+
+    const float px =
+        ray.origin_x + t * ray.direction_x;
+
+    const float py =
+        ray.origin_y + t * ray.direction_y;
+
+    const float pz =
+        ray.origin_z + t * ray.direction_z;
+
+    // Cone clipping is performed in local coordinates.
+    const float local_x = px - center_x;
+    const float local_y = py - center_y;
+    const float local_z = pz - center_z;
+
+    if (local_y < 0.0f || local_y > height) {
+        return false;
+    }
+
+    // Compute the outward normal.
+    const float radial_length = sqrtf(
+        local_x * local_x +
+        local_z * local_z
+    );
+
+    float nx;
+    float ny;
+    float nz;
+
+    // Match the CPU Cone apex normal.
+    if (radial_length == 0.0f) {
+        nx = 0.0f;
+        ny = 1.0f;
+        nz = 0.0f;
+    } else {
+        nx = local_x;
+        ny = -k * radial_length;
+        nz = local_z;
+
+        const float normal_length = sqrtf(
+            nx * nx +
+            ny * ny +
+            nz * nz
+        );
+
+        if (normal_length == 0.0f) {
+            return false;
+        }
+
+        const float inverse_length = 1.0f / normal_length;
+
+        nx *= inverse_length;
+        ny *= inverse_length;
+        nz *= inverse_length;
+    }
+
+    // Match HitRecord::set_face_normal().
+    const float direction_dot_normal =
+        ray.direction_x * nx +
+        ray.direction_y * ny +
+        ray.direction_z * nz;
+
+    if (direction_dot_normal >= 0.0f) {
+        nx = -nx;
+        ny = -ny;
+        nz = -nz;
+    }
+
+    hit_t = t;
+
+    hit_x = px;
+    hit_y = py;
+    hit_z = pz;
+
+    normal_x = nx;
+    normal_y = ny;
+    normal_z = nz;
+
+    return true;
+}
+
+// Intersects a ray with a GPU Cone.
+__device__ bool gpu_cone_hit(
+    const GPUPrimitive& primitive,
+    const GPURay& ray,
+    float ray_t_min,
+    float ray_t_max,
+    float& hit_t,
+    float& hit_x,
+    float& hit_y,
+    float& hit_z,
+    float& normal_x,
+    float& normal_y,
+    float& normal_z
+) {
+    const float center_x = primitive.parameters[0];
+    const float center_y = primitive.parameters[1];
+    const float center_z = primitive.parameters[2];
+
+    const float k = primitive.parameters[5];
+    const float k_squared = k * k;
+
+    // Ray origin relative to the Cone's center.
+    const float ox = ray.origin_x - center_x;
+    const float oy = ray.origin_y - center_y;
+    const float oz = ray.origin_z - center_z;
+
+    const float dx = ray.direction_x;
+    const float dy = ray.direction_y;
+    const float dz = ray.direction_z;
+
+    // Solve:
+    //
+    // x^2 + z^2 - k^2*y^2 = 0
+    //
+    // after substituting the ray equation.
+    const float a =
+        dx * dx +
+        dz * dz -
+        k_squared * dy * dy;
+
+    const float b = 2.0f * (
+        ox * dx +
+        oz * dz -
+        k_squared * oy * dy
+    );
+
+    const float c =
+        ox * ox +
+        oz * oz -
+        k_squared * oy * oy;
+
+    // Handle the linear-degenerate case.
+    if (a == 0.0f) {
+        if (b == 0.0f) {
+            return false;
+        }
+
+        const float t = -c / b;
+
+        return gpu_cone_test_root(
+            primitive,
+            ray,
+            ray_t_min,
+            ray_t_max,
+            t,
+            hit_t,
+            hit_x,
+            hit_y,
+            hit_z,
+            normal_x,
+            normal_y,
+            normal_z
+        );
+    }
+
+    const float discriminant = b * b - 4.0f * a * c;
+
+    if (discriminant < 0.0f) {
+        return false;
+    }
+
+    const float sqrt_discriminant = sqrtf(discriminant);
+
+    // Try the nearer root first.
+    const float first_root =
+        (-b - sqrt_discriminant) / (2.0f * a);
+
+    if (gpu_cone_test_root(
+        primitive,
+        ray,
+        ray_t_min,
+        ray_t_max,
+        first_root,
+        hit_t,
+        hit_x,
+        hit_y,
+        hit_z,
+        normal_x,
+        normal_y,
+        normal_z
+    )) {
+        return true;
+    }
+
+    // The nearer root may be outside the clipped Cone.
+    // Try the farther root.
+    const float second_root =
+        (-b + sqrt_discriminant) / (2.0f * a);
+
+    return gpu_cone_test_root(
+        primitive,
+        ray,
+        ray_t_min,
+        ray_t_max,
+        second_root,
+        hit_t,
+        hit_x,
+        hit_y,
+        hit_z,
+        normal_x,
+        normal_y,
+        normal_z
+    );
+}
+
+__device__ bool gpu_quadric_test_root(
+    const GPUPrimitive& primitive,
+    const GPURay& ray,
+    float ray_t_min,
+    float ray_t_max,
+    float t,
+    float& hit_t,
+    float& hit_x,
+    float& hit_y,
+    float& hit_z,
+    float& normal_x,
+    float& normal_y,
+    float& normal_z
+) {
+    if (t <= ray_t_min || t >= ray_t_max) {
+        return false;
+    }
+
+    const float center_x = primitive.parameters[0];
+    const float center_y = primitive.parameters[1];
+    const float center_z = primitive.parameters[2];
+
+    const float px = ray.origin_x + t * ray.direction_x;
+    const float py = ray.origin_y + t * ray.direction_y;
+    const float pz = ray.origin_z + t * ray.direction_z;
+
+    const float local_x = px - center_x;
+    const float local_y = py - center_y;
+    const float local_z = pz - center_z;
+
+    float nx = 0.0f;
+    float ny = 0.0f;
+    float nz = 0.0f;
+
+    if (primitive.type == GPUPrimitiveType::Cylinder) {
+        const float height = primitive.parameters[4];
+
+        if (local_y < 0.0f || local_y > height) {
+            return false;
+        }
+
+        nx = local_x;
+        ny = 0.0f;
+        nz = local_z;
+    }
+    else if (primitive.type == GPUPrimitiveType::Hyperboloid) {
+        const float height = primitive.parameters[4];
+        const float flare = primitive.parameters[5];
+
+        const float half_height = height / 2.0f;
+
+        if (
+            local_y < -half_height ||
+            local_y > half_height
+        ) {
+            return false;
+        }
+
+        const float flare_squared = flare * flare;
+
+        nx = local_x;
+        ny = -flare_squared * local_y;
+        nz = local_z;
+    }
+    else if (
+        primitive.type ==
+        GPUPrimitiveType::HyperbolicParaboloid
+    ) {
+        const float size = primitive.parameters[3];
+        const float height = primitive.parameters[4];
+
+        const float radius_squared =
+            local_x * local_x +
+            local_z * local_z;
+
+        const float half_height = height / 2.0f;
+
+        if (
+            radius_squared > size * size ||
+            local_y < -half_height ||
+            local_y > half_height
+        ) {
+            return false;
+        }
+
+        nx = 2.0f * local_x;
+        ny = -1.0f;
+        nz = -2.0f * local_z;
+    }
+    else {
+        return false;
+    }
+
+    const float normal_length = sqrtf(
+        nx * nx +
+        ny * ny +
+        nz * nz
+    );
+
+    if (normal_length == 0.0f) {
+        return false;
+    }
+
+    const float inverse_length = 1.0f / normal_length;
+
+    nx *= inverse_length;
+    ny *= inverse_length;
+    nz *= inverse_length;
+
+    // Match CPU HitRecord::set_face_normal().
+    const float direction_dot_normal =
+        ray.direction_x * nx +
+        ray.direction_y * ny +
+        ray.direction_z * nz;
+
+    if (direction_dot_normal >= 0.0f) {
+        nx = -nx;
+        ny = -ny;
+        nz = -nz;
+    }
+
+    hit_t = t;
+
+    hit_x = px;
+    hit_y = py;
+    hit_z = pz;
+
+    normal_x = nx;
+    normal_y = ny;
+    normal_z = nz;
+
+    return true;
+}
+
+
+__device__ bool gpu_quadric_hit(
+    const GPUPrimitive& primitive,
+    const GPURay& ray,
+    float ray_t_min,
+    float ray_t_max,
+    float& hit_t,
+    float& hit_x,
+    float& hit_y,
+    float& hit_z,
+    float& normal_x,
+    float& normal_y,
+    float& normal_z
+) {
+    const float center_x = primitive.parameters[0];
+    const float center_y = primitive.parameters[1];
+    const float center_z = primitive.parameters[2];
+
+    const float ox = ray.origin_x - center_x;
+    const float oy = ray.origin_y - center_y;
+    const float oz = ray.origin_z - center_z;
+
+    const float dx = ray.direction_x;
+    const float dy = ray.direction_y;
+    const float dz = ray.direction_z;
+
+    float a;
+    float b;
+    float c;
+
+    if (primitive.type == GPUPrimitiveType::Cylinder) {
+        const float radius = primitive.parameters[3];
+
+        a = dx * dx + dz * dz;
+
+        b = 2.0f * (
+            ox * dx +
+            oz * dz
+        );
+
+        c =
+            ox * ox +
+            oz * oz -
+            radius * radius;
+    }
+    else if (primitive.type == GPUPrimitiveType::Hyperboloid) {
+        const float flare = primitive.parameters[5];
+        const float flare_squared = flare * flare;
+
+        a =
+            dx * dx +
+            dz * dz -
+            flare_squared * dy * dy;
+
+        b = 2.0f * (
+            ox * dx +
+            oz * dz -
+            flare_squared * oy * dy
+        );
+
+        c =
+            ox * ox +
+            oz * oz -
+            flare_squared * oy * oy -
+            primitive.parameters[3] * primitive.parameters[3];
+    }
+    else if (
+        primitive.type ==
+        GPUPrimitiveType::HyperbolicParaboloid
+    ) {
+        a = dx * dx - dz * dz;
+
+        b = 2.0f * (
+            ox * dx -
+            oz * dz
+        ) - dy;
+
+        c =
+            ox * ox -
+            oz * oz -
+            oy;
+    }
+    else {
+        return false;
+    }
+
+    // Handle the linear-degenerate case.
+    if (a == 0.0f) {
+        if (b == 0.0f) {
+            return false;
+        }
+
+        const float t = -c / b;
+
+        return gpu_quadric_test_root(
+            primitive,
+            ray,
+            ray_t_min,
+            ray_t_max,
+            t,
+            hit_t,
+            hit_x,
+            hit_y,
+            hit_z,
+            normal_x,
+            normal_y,
+            normal_z
+        );
+    }
+
+    const float discriminant = b * b - 4.0f * a * c;
+
+    if (discriminant < 0.0f) {
+        return false;
+    }
+
+    const float sqrt_discriminant = sqrtf(discriminant);
+
+    const float first_root =
+        (-b - sqrt_discriminant) / (2.0f * a);
+
+    if (gpu_quadric_test_root(
+        primitive,
+        ray,
+        ray_t_min,
+        ray_t_max,
+        first_root,
+        hit_t,
+        hit_x,
+        hit_y,
+        hit_z,
+        normal_x,
+        normal_y,
+        normal_z
+    )) {
+        return true;
+    }
+
+    const float second_root =
+        (-b + sqrt_discriminant) / (2.0f * a);
+
+    return gpu_quadric_test_root(
+        primitive,
+        ray,
+        ray_t_min,
+        ray_t_max,
+        second_root,
+        hit_t,
+        hit_x,
+        hit_y,
+        hit_z,
+        normal_x,
+        normal_y,
+        normal_z
+    );
+}
+
+// Traverses the flattened GPU BVH and finds the closest primitive hit
 __device__ GPUTraversalResult gpu_bvh_hit(
     const GPUBvhNode* nodes,
     const GPUPrimitive* primitives,
@@ -267,7 +790,7 @@ __device__ GPUTraversalResult gpu_bvh_hit(
     stack[stack_size++] = 0;
 
     while (stack_size > 0) {
-        int node_index = stack[--stack_size];
+        const int node_index = stack[--stack_size];
 
         if (node_index < 0 || node_index >= node_count) {
             continue;
@@ -286,7 +809,8 @@ __device__ GPUTraversalResult gpu_bvh_hit(
 
         if (node.primitive_count > 0) {
             for (int i = 0; i < node.primitive_count; i++) {
-                int primitive_index = node.primitive_start + i;
+                const int primitive_index =
+                    node.primitive_start + i;
 
                 if (primitive_index < 0 ||
                     primitive_index >= primitive_count) {
@@ -308,7 +832,6 @@ __device__ GPUTraversalResult gpu_bvh_hit(
                 bool primitive_hit = false;
 
                 if (primitive.type == GPUPrimitiveType::Quad) {
-
                     primitive_hit = gpu_quad_hit(
                         primitive,
                         ray,
@@ -321,17 +844,47 @@ __device__ GPUTraversalResult gpu_bvh_hit(
                     );
 
                     if (primitive_hit) {
-                        // The quad's stored normal is already normalized.
                         hit_normal_x = primitive.parameters[9];
                         hit_normal_y = primitive.parameters[10];
                         hit_normal_z = primitive.parameters[11];
                     }
-
-                } else if (
-                    primitive.type == GPUPrimitiveType::Sphere
-                ) {
-
+                }
+                else if (primitive.type == GPUPrimitiveType::Sphere) {
                     primitive_hit = gpu_sphere_hit(
+                        primitive,
+                        ray,
+                        ray_t_min,
+                        result.t,
+                        hit_t,
+                        hit_x,
+                        hit_y,
+                        hit_z,
+                        hit_normal_x,
+                        hit_normal_y,
+                        hit_normal_z
+                    );
+                }
+                else if (primitive.type == GPUPrimitiveType::Cone) {
+                    primitive_hit = gpu_cone_hit(
+                        primitive,
+                        ray,
+                        ray_t_min,
+                        result.t,
+                        hit_t,
+                        hit_x,
+                        hit_y,
+                        hit_z,
+                        hit_normal_x,
+                        hit_normal_y,
+                        hit_normal_z
+                    );
+                }
+                else if (
+                    primitive.type == GPUPrimitiveType::Cylinder ||
+                    primitive.type == GPUPrimitiveType::Hyperboloid ||
+                    primitive.type == GPUPrimitiveType::HyperbolicParaboloid
+                ) {
+                    primitive_hit = gpu_quadric_hit(
                         primitive,
                         ray,
                         ray_t_min,
@@ -360,14 +913,15 @@ __device__ GPUTraversalResult gpu_bvh_hit(
                     result.normal_z = hit_normal_z;
                 }
             }
-        } else {
-            int children[2] = {
+        }
+        else {
+            const int children[2] = {
                 node.left_child,
                 node.right_child
             };
 
             for (int i = 0; i < 2; i++) {
-                int child_index = children[i];
+                const int child_index = children[i];
 
                 if (child_index < 0 || child_index >= node_count) {
                     continue;
