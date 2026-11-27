@@ -367,6 +367,18 @@ class Torus : public Quartic {
                     center + Vec3(total_radius, minor_radius, total_radius)
                 );
             }
+        
+        const Point3& get_center() const {
+            return center;
+        }
+
+        real get_major_radius() const {
+            return major_radius;
+        }
+
+        real get_minor_radius() const {
+            return minor_radius;
+        }
 };
 
 class BohemianDome : public Quartic {
@@ -463,6 +475,14 @@ class BohemianDome : public Quartic {
                 center - Vec3(radius, 2.0 * radius, radius),
                 center + Vec3(radius, 2.0 * radius, radius)
             );
+        }
+
+        const Point3& get_center() const {
+            return center;
+        }
+
+        real get_radius() const {
+            return radius;
         }
 };
 
@@ -632,6 +652,22 @@ class ChairSurface : public Quartic {
 
             bbox = Aabb(center - extent, center + extent);
         }
+
+        const Point3& get_center() const {
+            return center;
+        }
+
+        real get_shape_a() const {
+            return shape_a;
+        }
+
+        real get_shape_b() const {
+            return shape_b;
+        }
+
+        real get_scale_k() const {
+            return scale_k;
+        }
 };
 
 class KummerSurface : public Quartic {
@@ -739,6 +775,18 @@ class KummerSurface : public Quartic {
             real ext = scale * 2.2;
             bbox = Aabb(center - Vec3(ext, ext, ext), center + Vec3(ext, ext, ext));
         }
+
+        const Point3& get_center() const {
+            return center;
+        }
+
+        real get_lambda() const {
+            return lambda;
+        }
+
+        real get_scale() const {
+            return scale;
+        }
 };
 
 class RomanSurface : public Quartic {
@@ -844,6 +892,18 @@ class RomanSurface : public Quartic {
         RomanSurface(const Point3& center, real scale, shared_ptr<Material> mat, real shape_mu = 1.0) : Quartic(mat), center(center), scale(scale), shape_mu(shape_mu) {
             real ext = scale * 1.5;
             bbox = Aabb(center - Vec3(ext, ext, ext), center + Vec3(ext, ext, ext));
+        }
+
+        const Point3& get_center() const {
+            return center;
+        }
+
+        real get_scale() const {
+            return scale;
+        }
+
+        real get_shape_mu() const {
+            return shape_mu;
         }
 };
 
@@ -963,6 +1023,26 @@ class GoursatSurface : public Quartic {
             real ext = scale * 2.0;
             bbox = Aabb(center - Vec3(ext, ext, ext), center + Vec3(ext, ext, ext));
         }
+
+        const Point3& get_center() const {
+            return center;
+        }
+
+        real get_scale() const {
+            return scale;
+        }
+
+        real get_param_a() const {
+            return param_a;
+        }
+
+        real get_param_b() const {
+            return param_b;
+        }
+
+        real get_param_c() const {
+            return param_c;
+        }
 };
 
 class TangleCube : public Quartic {
@@ -1036,6 +1116,14 @@ class TangleCube : public Quartic {
             : Quartic(mat), center(center), scale(scale) {
             real ext = scale * 2.2;
             bbox = Aabb(center - Vec3(ext, ext, ext), center + Vec3(ext, ext, ext));
+        }
+
+        const Point3& get_center() const {
+            return center;
+        }
+
+        real get_scale() const {
+            return scale;
         }
 };
 

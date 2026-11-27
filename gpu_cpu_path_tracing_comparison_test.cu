@@ -93,6 +93,24 @@ struct GPUConeTestResult {
     float normal_z;
 };
 
+struct GPUQuadricTestInput {
+    GPURay ray;
+    float t_min;
+    float t_max;
+};
+
+struct GPUQuadricTestResult {
+    GPUTraversalResult direct;
+    GPUTraversalResult bvh;
+};
+
+struct GPUQuadricTestCase {
+    std::string name;
+    GPURay ray;
+    float t_min;
+    float t_max;
+};
+
 __global__ void cone_intersection_test_kernel(
     const GPUPrimitive* primitives,
     const GPUConeTestInput* tests,
@@ -289,6 +307,85 @@ __global__ void cone_bvh_intersection_test_kernel(
         test.t_min,
         test.t_max
     );
+}
+
+__global__ void quadric_intersection_test_kernel(
+    const GPUBvhNode* nodes,
+    const GPUPrimitive* primitives,
+    int node_count,
+    int primitive_count,
+    const GPUQuadricTestInput* tests,
+    GPUQuadricTestResult* results,
+    int test_count
+) {
+    const int index = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (index >= test_count) {
+        return;
+    }
+
+    const GPUQuadricTestInput& test = tests[index];
+
+    // --------------------------------------------------
+    // 1. Direct GPU intersection.
+    // --------------------------------------------------
+
+    GPUQuadricTestResult result{};
+
+    const GPUPrimitive& primitive = primitives[0];
+
+    float hit_t = test.t_max;
+
+    float hit_x = 0.0f;
+    float hit_y = 0.0f;
+    float hit_z = 0.0f;
+
+    float normal_x = 0.0f;
+    float normal_y = 0.0f;
+    float normal_z = 0.0f;
+
+    const bool direct_hit = gpu_quadric_hit(
+        primitive,
+        test.ray,
+        test.t_min,
+        test.t_max,
+        hit_t,
+        hit_x,
+        hit_y,
+        hit_z,
+        normal_x,
+        normal_y,
+        normal_z
+    );
+
+    result.direct.hit = static_cast<int>(direct_hit);
+    result.direct.primitive_index = direct_hit ? 0 : -1;
+    result.direct.stack_overflow = 0;
+    result.direct.t = direct_hit ? hit_t : test.t_max;
+
+    result.direct.position_x = hit_x;
+    result.direct.position_y = hit_y;
+    result.direct.position_z = hit_z;
+
+    result.direct.normal_x = normal_x;
+    result.direct.normal_y = normal_y;
+    result.direct.normal_z = normal_z;
+
+    // --------------------------------------------------
+    // 2. GPU BVH intersection.
+    // --------------------------------------------------
+
+    result.bvh = gpu_bvh_hit(
+        nodes,
+        primitives,
+        node_count,
+        primitive_count,
+        test.ray,
+        test.t_min,
+        test.t_max
+    );
+
+    results[index] = result;
 }
 
 __global__ void compare_bvh_and_linear_kernel(
@@ -1916,6 +2013,517 @@ void run_gpu_cone_bvh_intersection_tests() {
     }
 }
 
+void run_gpu_quadric_shape_tests(
+    const std::string& shape_name,
+    const shared_ptr<Quadric>& shape,
+    const std::vector<GPUQuadricTestCase>& test_cases
+) {
+    // --------------------------------------------------
+    // 1. Construct an isolated CPU scene.
+    // --------------------------------------------------
+
+    HittableList world;
+    world.add(shape);
+
+    // --------------------------------------------------
+    // 2. Build a GPU scene containing this one quadric.
+    // --------------------------------------------------
+
+    GPUScene host_scene = build_gpu_scene_from_list(world);
+
+    if (host_scene.primitives.size() != 1) {
+        throw std::runtime_error(
+            shape_name +
+            ": Expected exactly one GPU primitive."
+        );
+    }
+
+    GPUDeviceScene device_scene = upload_gpu_scene(host_scene);
+
+    const int test_count = static_cast<int>(test_cases.size());
+
+    if (test_count == 0) {
+        free_gpu_scene(device_scene);
+
+        throw std::runtime_error(
+            shape_name + ": No intersection tests supplied."
+        );
+    }
+
+    // --------------------------------------------------
+    // 3. Construct GPU test inputs.
+    // --------------------------------------------------
+
+    std::vector<GPUQuadricTestInput> host_tests;
+
+    host_tests.reserve(test_count);
+
+    for (const GPUQuadricTestCase& test : test_cases) {
+        host_tests.push_back(GPUQuadricTestInput{
+            test.ray,
+            test.t_min,
+            test.t_max
+        });
+    }
+
+    // --------------------------------------------------
+    // 4. Allocate GPU test memory.
+    // --------------------------------------------------
+
+    GPUQuadricTestInput* device_tests = nullptr;
+    GPUQuadricTestResult* device_results = nullptr;
+
+    check_cuda(
+        cudaMalloc(
+            reinterpret_cast<void**>(&device_tests),
+            test_count * sizeof(GPUQuadricTestInput)
+        ),
+        "Allocating quadric test inputs"
+    );
+
+    check_cuda(
+        cudaMalloc(
+            reinterpret_cast<void**>(&device_results),
+            test_count * sizeof(GPUQuadricTestResult)
+        ),
+        "Allocating quadric test results"
+    );
+
+    // --------------------------------------------------
+    // 5. Copy test inputs to the GPU.
+    // --------------------------------------------------
+
+    check_cuda(
+        cudaMemcpy(
+            device_tests,
+            host_tests.data(),
+            test_count * sizeof(GPUQuadricTestInput),
+            cudaMemcpyHostToDevice
+        ),
+        "Copying quadric test inputs"
+    );
+
+    // --------------------------------------------------
+    // 6. Execute direct and BVH GPU tests.
+    // --------------------------------------------------
+
+    constexpr int threads_per_block = 32;
+
+    const int blocks =
+        (test_count + threads_per_block - 1) /
+        threads_per_block;
+
+    quadric_intersection_test_kernel<<<
+        blocks,
+        threads_per_block
+    >>>(
+        device_scene.bvh_nodes,
+        device_scene.primitives,
+        static_cast<int>(device_scene.bvh_node_count),
+        static_cast<int>(device_scene.primitive_count),
+        device_tests,
+        device_results,
+        test_count
+    );
+
+    check_cuda(
+        cudaGetLastError(),
+        "Launching quadric intersection test kernel"
+    );
+
+    check_cuda(
+        cudaDeviceSynchronize(),
+        "Executing quadric intersection test kernel"
+    );
+
+    // --------------------------------------------------
+    // 7. Copy GPU results back to the CPU.
+    // --------------------------------------------------
+
+    std::vector<GPUQuadricTestResult> gpu_results(test_count);
+
+    check_cuda(
+        cudaMemcpy(
+            gpu_results.data(),
+            device_results,
+            test_count * sizeof(GPUQuadricTestResult),
+            cudaMemcpyDeviceToHost
+        ),
+        "Copying quadric intersection results"
+    );
+
+    // --------------------------------------------------
+    // 8. Compare CPU, direct GPU, and GPU BVH results.
+    // --------------------------------------------------
+
+    constexpr double tolerance = 1e-4;
+
+    int direct_mismatches = 0;
+    int bvh_mismatches = 0;
+    int stack_overflows = 0;
+
+    std::cout
+        << "\n========================================\n"
+        << "CPU / GPU " << shape_name << " TESTS\n"
+        << "========================================\n";
+
+    for (int i = 0; i < test_count; i++) {
+        const GPUQuadricTestCase& test = test_cases[i];
+        const GPUQuadricTestResult& gpu = gpu_results[i];
+
+        Point3 origin(
+            test.ray.origin_x,
+            test.ray.origin_y,
+            test.ray.origin_z
+        );
+
+        Vec3 direction(
+            test.ray.direction_x,
+            test.ray.direction_y,
+            test.ray.direction_z
+        );
+
+        Ray cpu_ray(origin, direction);
+
+        HitRecord cpu_record;
+
+        const bool cpu_hit = shape->hit(
+            cpu_ray,
+            Interval(test.t_min, test.t_max),
+            cpu_record
+        );
+
+        // Compare one GPU result against the CPU result.
+        auto compare_result = [&](const GPUTraversalResult& result) {
+            bool failed = false;
+
+            if (static_cast<int>(cpu_hit) != result.hit) {
+                failed = true;
+            }
+
+            if (result.stack_overflow) {
+                stack_overflows++;
+                failed = true;
+            }
+
+            if (cpu_hit && result.hit) {
+                if (result.primitive_index != 0) {
+                    failed = true;
+                }
+
+                if (
+                    std::fabs(
+                        static_cast<double>(cpu_record.t) - result.t
+                    ) > tolerance
+                ) {
+                    failed = true;
+                }
+
+                if (
+                    std::fabs(
+                        static_cast<double>(cpu_record.p.x()) -
+                        result.position_x
+                    ) > tolerance ||
+                    std::fabs(
+                        static_cast<double>(cpu_record.p.y()) -
+                        result.position_y
+                    ) > tolerance ||
+                    std::fabs(
+                        static_cast<double>(cpu_record.p.z()) -
+                        result.position_z
+                    ) > tolerance
+                ) {
+                    failed = true;
+                }
+
+                if (
+                    std::fabs(
+                        static_cast<double>(cpu_record.normal.x()) -
+                        result.normal_x
+                    ) > tolerance ||
+                    std::fabs(
+                        static_cast<double>(cpu_record.normal.y()) -
+                        result.normal_y
+                    ) > tolerance ||
+                    std::fabs(
+                        static_cast<double>(cpu_record.normal.z()) -
+                        result.normal_z
+                    ) > tolerance
+                ) {
+                    failed = true;
+                }
+            }
+            else if (!cpu_hit && result.primitive_index != -1) {
+                failed = true;
+            }
+
+            return failed;
+        };
+
+        const bool direct_failed =
+            compare_result(gpu.direct);
+
+        const bool bvh_failed =
+            compare_result(gpu.bvh);
+
+        if (direct_failed) {
+            direct_mismatches++;
+        }
+
+        if (bvh_failed) {
+            bvh_mismatches++;
+        }
+
+        std::cout
+            << (direct_failed || bvh_failed ? "[FAIL] " : "[PASS] ")
+            << test.name
+            << "\n  Direct GPU: "
+            << (direct_failed ? "FAIL" : "PASS")
+            << "\n  BVH GPU: "
+            << (bvh_failed ? "FAIL" : "PASS")
+            << '\n';
+
+        if (direct_failed || bvh_failed) {
+            std::cout
+                << "  CPU hit: " << cpu_hit
+                << "\n  Direct GPU hit: " << gpu.direct.hit
+                << "\n  BVH GPU hit: " << gpu.bvh.hit
+                << "\n  CPU t: "
+                << (cpu_hit ? cpu_record.t : -1.0)
+                << "\n  Direct GPU t: " << gpu.direct.t
+                << "\n  BVH GPU t: " << gpu.bvh.t
+                << "\n  Direct primitive: "
+                << gpu.direct.primitive_index
+                << "\n  BVH primitive: "
+                << gpu.bvh.primitive_index
+                << "\n  BVH stack overflow: "
+                << gpu.bvh.stack_overflow
+                << '\n';
+
+            if (cpu_hit && gpu.direct.hit) {
+                std::cout
+                    << "  CPU position: "
+                    << cpu_record.p.x() << ", "
+                    << cpu_record.p.y() << ", "
+                    << cpu_record.p.z()
+                    << "\n  Direct GPU position: "
+                    << gpu.direct.position_x << ", "
+                    << gpu.direct.position_y << ", "
+                    << gpu.direct.position_z
+                    << "\n  CPU normal: "
+                    << cpu_record.normal.x() << ", "
+                    << cpu_record.normal.y() << ", "
+                    << cpu_record.normal.z()
+                    << "\n  Direct GPU normal: "
+                    << gpu.direct.normal_x << ", "
+                    << gpu.direct.normal_y << ", "
+                    << gpu.direct.normal_z
+                    << '\n';
+            }
+        }
+    }
+
+    // --------------------------------------------------
+    // 9. Print summary.
+    // --------------------------------------------------
+
+    std::cout
+        << "\nDirect GPU mismatches: "
+        << direct_mismatches
+        << "\nBVH GPU mismatches: "
+        << bvh_mismatches
+        << "\nBVH stack overflows: "
+        << stack_overflows
+        << "\nTotal tests: "
+        << test_count
+        << '\n';
+
+    // --------------------------------------------------
+    // 10. Release GPU resources.
+    // --------------------------------------------------
+
+    check_cuda(
+        cudaFree(device_tests),
+        "Freeing quadric test inputs"
+    );
+
+    check_cuda(
+        cudaFree(device_results),
+        "Freeing quadric test results"
+    );
+
+    free_gpu_scene(device_scene);
+
+    if (
+        direct_mismatches != 0 ||
+        bvh_mismatches != 0 ||
+        stack_overflows != 0
+    ) {
+        throw std::runtime_error(
+            "CPU/GPU " + shape_name +
+            " intersection tests failed."
+        );
+    }
+}
+
+void run_gpu_quadric_intersection_tests() {
+    auto material = make_shared<Lambertian>(
+        Color(0.65, 0.15, 0.05)
+    );
+
+    // ==================================================
+    // CYLINDER
+    // ==================================================
+
+    auto cylinder = make_shared<Cylinder>(
+        Point3(0, 0, 0),
+        1.0,
+        2.0,
+        material
+    );
+
+    const std::vector<GPUQuadricTestCase> cylinder_tests = {
+        {
+            "Cylinder front-facing intersection",
+            GPURay{0, 1, -3, 0, 0, 1},
+            0.001f,
+            100.0f
+        },
+        {
+            "Cylinder far-side intersection",
+            GPURay{0, 1, -3, 0, 0, 1},
+            2.1f,
+            100.0f
+        },
+        {
+            "Cylinder near root clipped, farther root valid",
+            GPURay{0, -3, -3, 0, 1, 1},
+            0.001f,
+            100.0f
+        },
+        {
+            "Cylinder miss",
+            GPURay{2, 1, -3, 0, 0, 1},
+            0.001f,
+            100.0f
+        },
+        {
+            "Cylinder tangent intersection",
+            GPURay{1, 1, -3, 0, 0, 1},
+            0.001f,
+            100.0f
+        }
+    };
+
+    run_gpu_quadric_shape_tests(
+        "CYLINDER",
+        cylinder,
+        cylinder_tests
+    );
+
+    // ==================================================
+    // HYPERBOLOID
+    // ==================================================
+
+    auto hyperboloid = make_shared<Hyperboloid>(
+        Point3(0, 0, 0),
+        1.0,
+        4.0,
+        1.0,
+        material
+    );
+
+    const std::vector<GPUQuadricTestCase> hyperboloid_tests = {
+        {
+            "Hyperboloid front-facing intersection",
+            GPURay{0, 0, -3, 0, 0, 1},
+            0.001f,
+            100.0f
+        },
+        {
+            "Hyperboloid far-side intersection",
+            GPURay{0, 0, -3, 0, 0, 1},
+            2.1f,
+            100.0f
+        },
+        {
+            "Hyperboloid miss",
+            GPURay{3, 0, -3, 0, 0, 1},
+            0.001f,
+            100.0f
+        },
+        {
+            "Hyperboloid tangent intersection",
+            GPURay{1, 0, -3, 0, 0, 1},
+            0.001f,
+            100.0f
+        },
+        {
+            "Hyperboloid linear-degenerate intersection",
+            GPURay{-3, 0, 0, 1, 1, 0},
+            0.001f,
+            100.0f
+        }
+    };
+
+    run_gpu_quadric_shape_tests(
+        "HYPERBOLOID",
+        hyperboloid,
+        hyperboloid_tests
+    );
+
+    // ==================================================
+    // HYPERBOLIC PARABOLOID
+    // ==================================================
+
+    auto hyperbolic_paraboloid =
+        make_shared<HyperbolicParaboloid>(
+            Point3(0, 0, 0),
+            2.0,
+            4.0,
+            material
+        );
+
+    const std::vector<GPUQuadricTestCase> paraboloid_tests = {
+        {
+            "Hyperbolic paraboloid front-facing intersection",
+            GPURay{0, -1, -1.5f, 0, 0, 1},
+            0.001f,
+            100.0f
+        },
+        {
+            "Hyperbolic paraboloid farther root",
+            GPURay{0, -1, -1.5f, 0, 0, 1},
+            0.6f,
+            100.0f
+        },
+        {
+            "Hyperbolic paraboloid miss",
+            GPURay{3, -1, -1.5f, 0, 0, 1},
+            0.001f,
+            100.0f
+        },
+        {
+            "Hyperbolic paraboloid tangent intersection",
+            GPURay{0, 0, -3, 0, 0, 1},
+            0.001f,
+            100.0f
+        },
+        {
+            "Hyperbolic paraboloid linear-degenerate intersection",
+            GPURay{-1, 0, 0, 1, 0, 1},
+            0.001f,
+            100.0f
+        }
+    };
+
+    run_gpu_quadric_shape_tests(
+        "HYPERBOLIC PARABOLOID",
+        hyperbolic_paraboloid,
+        paraboloid_tests
+    );
+}
+
 int main() {
     GPUDeviceScene device_scene{};
     GPUColor* device_pixels = nullptr;
@@ -1952,18 +2560,75 @@ int main() {
         HittableList world;
         HittableList lights;
 
+        // --------------------------------------------------
+        // Add all supported complex shapes to the scene.
+        // --------------------------------------------------
+
         auto cone_material = make_shared<Lambertian>(
             Color(0.65, 0.15, 0.05)
         );
 
-        auto cone = make_shared<Cone>(
-            Point3(180, 0, 300),
-            60.0,
-            120.0,
-            cone_material
+        auto cylinder_material = make_shared<Lambertian>(
+            Color(0.05, 0.55, 0.65)
         );
 
-        world.add(cone);
+        auto hyperboloid_material = make_shared<Lambertian>(
+            Color(0.65, 0.35, 0.05)
+        );
+
+        auto hyperbolic_paraboloid_material =
+            make_shared<Lambertian>(
+                Color(0.45, 0.15, 0.65)
+            );
+
+        auto blue = make_shared<Lambertian>(
+            Color(0.05, 0.15, 0.65)
+        );
+
+        auto yellow = make_shared<Lambertian>(
+            Color(0.65, 0.45, 0.05)
+        );
+
+        world.add(make_shared<Cone>(
+            Point3(140, 0, 220),
+            45.0,
+            100.0,
+            cone_material
+        ));
+
+        world.add(make_shared<Cylinder>(
+            Point3(415, 0, 220),
+            35.0,
+            110.0,
+            cylinder_material
+        ));
+
+        world.add(make_shared<Hyperboloid>(
+            Point3(280, 110, 310),
+            30.0,
+            140.0,
+            0.7,
+            hyperboloid_material
+        ));
+
+        world.add(make_shared<HyperbolicParaboloid>(
+            Point3(280, 277, 470),
+            15.0,
+            400.0,
+            hyperbolic_paraboloid_material
+        ));
+
+        world.add(make_shared<Sphere>(
+            Point3(100, 50, 420),
+            50,
+            blue
+        ));
+
+        world.add(make_shared<Sphere>(
+            Point3(455, 50, 420),
+            50,
+            yellow
+        ));
 
         world.add(make_shared<Quad>(
             Point3(555, 0, 0),
@@ -2008,29 +2673,6 @@ int main() {
         ));
 
         // The CPU light list contains the same light geometry.
-        // --------------------------------------------------
-        // Add GPU sphere-intersection test objects.
-        // --------------------------------------------------
-
-        auto blue = make_shared<Lambertian>(
-            Color(0.05, 0.15, 0.65)
-        );
-
-        auto yellow = make_shared<Lambertian>(
-            Color(0.65, 0.45, 0.05)
-        );
-
-        world.add(make_shared<Sphere>(
-            Point3(180, 100, 300),
-            100,
-            blue
-        ));
-
-        world.add(make_shared<Sphere>(
-            Point3(370, 100, 400),
-            100,
-            yellow
-        ));
 
         // Its material is intentionally null.
         shared_ptr<Material> empty_material;
@@ -2074,10 +2716,10 @@ int main() {
         GPUScene host_scene =
             build_gpu_scene_from_list(world);
 
-        if (host_scene.primitives.size() != 9) {
+        if (host_scene.primitives.size() != 12) {
             throw std::runtime_error(
                 "Expected exactly nine GPU primitives: "
-                "six Quads and two Spheres."
+                "one Cone, six Quads, and two Spheres."
             );
         }
 
@@ -2146,11 +2788,16 @@ int main() {
         
         std::cout << "\nTesting CPU/GPU Cone intersections...\n";
 
+        run_gpu_cone_intersection_tests();
+
         std::cout << "\nTesting CPU/GPU Cone BVH intersections...\n";
 
         run_gpu_cone_bvh_intersection_tests();
 
-        run_gpu_cone_intersection_tests();
+        std::cout << "\nTesting CPU/GPU Cylinder, Hyperboloid, "
+                << "and Hyperbolic Paraboloid intersections...\n";
+
+        run_gpu_quadric_intersection_tests();
 
         GPUCamera gpu_camera =
             build_gpu_camera(camera);

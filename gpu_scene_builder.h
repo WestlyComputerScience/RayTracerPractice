@@ -13,6 +13,7 @@
 #include "hittable_list.h"
 #include "gpu_bvh_builder.h"
 #include "quadrics.h"
+#include "quartic.h"
 
 inline Color get_solid_texture_color(
     const shared_ptr<Texture>& texture
@@ -439,6 +440,254 @@ inline GPUPrimitive convert_hyperbolic_paraboloid_to_gpu(
     return primitive;
 }
 
+inline GPUPrimitive convert_torus_to_gpu(
+    const Torus& torus,
+    int material_index
+) {
+    GPUPrimitive primitive{};
+
+    primitive.type = GPUPrimitiveType::Torus;
+
+    const Aabb bbox = torus.bounding_box();
+
+    primitive.min_x = static_cast<float>(bbox.x.min);
+    primitive.min_y = static_cast<float>(bbox.y.min);
+    primitive.min_z = static_cast<float>(bbox.z.min);
+
+    primitive.max_x = static_cast<float>(bbox.x.max);
+    primitive.max_y = static_cast<float>(bbox.y.max);
+    primitive.max_z = static_cast<float>(bbox.z.max);
+
+    const Point3& center = torus.get_center();
+
+    primitive.parameters[0] = static_cast<float>(center.x());
+    primitive.parameters[1] = static_cast<float>(center.y());
+    primitive.parameters[2] = static_cast<float>(center.z());
+
+    primitive.parameters[3] =
+        static_cast<float>(torus.get_major_radius());
+
+    primitive.parameters[4] =
+        static_cast<float>(torus.get_minor_radius());
+
+    primitive.material_index = material_index;
+
+    return primitive;
+}
+
+inline GPUPrimitive convert_bohemian_dome_to_gpu(
+    const BohemianDome& dome,
+    int material_index
+) {
+    GPUPrimitive primitive{};
+
+    primitive.type = GPUPrimitiveType::BohemianDome;
+
+    const Aabb bbox = dome.bounding_box();
+
+    primitive.min_x = static_cast<float>(bbox.x.min);
+    primitive.min_y = static_cast<float>(bbox.y.min);
+    primitive.min_z = static_cast<float>(bbox.z.min);
+
+    primitive.max_x = static_cast<float>(bbox.x.max);
+    primitive.max_y = static_cast<float>(bbox.y.max);
+    primitive.max_z = static_cast<float>(bbox.z.max);
+
+    const Point3& center = dome.get_center();
+
+    primitive.parameters[0] = static_cast<float>(center.x());
+    primitive.parameters[1] = static_cast<float>(center.y());
+    primitive.parameters[2] = static_cast<float>(center.z());
+
+    primitive.parameters[3] =
+        static_cast<float>(dome.get_radius());
+
+    primitive.material_index = material_index;
+
+    return primitive;
+}
+
+inline GPUPrimitive convert_chair_surface_to_gpu(
+    const ChairSurface& surface,
+    int material_index
+) {
+    GPUPrimitive primitive{};
+
+    primitive.type = GPUPrimitiveType::ChairSurface;
+
+    const Aabb bbox = surface.bounding_box();
+
+    primitive.min_x = static_cast<float>(bbox.x.min);
+    primitive.min_y = static_cast<float>(bbox.y.min);
+    primitive.min_z = static_cast<float>(bbox.z.min);
+
+    primitive.max_x = static_cast<float>(bbox.x.max);
+    primitive.max_y = static_cast<float>(bbox.y.max);
+    primitive.max_z = static_cast<float>(bbox.z.max);
+
+    const Point3& center = surface.get_center();
+
+    primitive.parameters[0] = static_cast<float>(center.x());
+    primitive.parameters[1] = static_cast<float>(center.y());
+    primitive.parameters[2] = static_cast<float>(center.z());
+
+    primitive.parameters[3] =
+        static_cast<float>(surface.get_shape_a());
+
+    primitive.parameters[4] =
+        static_cast<float>(surface.get_shape_b());
+
+    primitive.parameters[5] =
+        static_cast<float>(surface.get_scale_k());
+
+    primitive.material_index = material_index;
+
+    return primitive;
+}
+
+inline GPUPrimitive convert_kummer_surface_to_gpu(
+    const KummerSurface& surface,
+    int material_index
+) {
+    GPUPrimitive primitive{};
+
+    primitive.type = GPUPrimitiveType::KummerSurface;
+
+    const Aabb bbox = surface.bounding_box();
+
+    primitive.min_x = static_cast<float>(bbox.x.min);
+    primitive.min_y = static_cast<float>(bbox.y.min);
+    primitive.min_z = static_cast<float>(bbox.z.min);
+
+    primitive.max_x = static_cast<float>(bbox.x.max);
+    primitive.max_y = static_cast<float>(bbox.y.max);
+    primitive.max_z = static_cast<float>(bbox.z.max);
+
+    const Point3& center = surface.get_center();
+
+    primitive.parameters[0] = static_cast<float>(center.x());
+    primitive.parameters[1] = static_cast<float>(center.y());
+    primitive.parameters[2] = static_cast<float>(center.z());
+
+    primitive.parameters[3] =
+        static_cast<float>(surface.get_lambda());
+
+    primitive.parameters[4] =
+        static_cast<float>(surface.get_scale());
+
+    primitive.material_index = material_index;
+
+    return primitive;
+}
+
+inline GPUPrimitive convert_roman_surface_to_gpu(
+    const RomanSurface& surface,
+    int material_index
+) {
+    GPUPrimitive primitive{};
+
+    primitive.type = GPUPrimitiveType::RomanSurface;
+
+    const Aabb bbox = surface.bounding_box();
+
+    primitive.min_x = static_cast<float>(bbox.x.min);
+    primitive.min_y = static_cast<float>(bbox.y.min);
+    primitive.min_z = static_cast<float>(bbox.z.min);
+
+    primitive.max_x = static_cast<float>(bbox.x.max);
+    primitive.max_y = static_cast<float>(bbox.y.max);
+    primitive.max_z = static_cast<float>(bbox.z.max);
+
+    const Point3& center = surface.get_center();
+
+    primitive.parameters[0] = static_cast<float>(center.x());
+    primitive.parameters[1] = static_cast<float>(center.y());
+    primitive.parameters[2] = static_cast<float>(center.z());
+
+    primitive.parameters[3] =
+        static_cast<float>(surface.get_scale());
+
+    primitive.parameters[4] =
+        static_cast<float>(surface.get_shape_mu());
+
+    primitive.material_index = material_index;
+
+    return primitive;
+}
+
+inline GPUPrimitive convert_goursat_surface_to_gpu(
+    const GoursatSurface& surface,
+    int material_index
+) {
+    GPUPrimitive primitive{};
+
+    primitive.type = GPUPrimitiveType::GoursatSurface;
+
+    const Aabb bbox = surface.bounding_box();
+
+    primitive.min_x = static_cast<float>(bbox.x.min);
+    primitive.min_y = static_cast<float>(bbox.y.min);
+    primitive.min_z = static_cast<float>(bbox.z.min);
+
+    primitive.max_x = static_cast<float>(bbox.x.max);
+    primitive.max_y = static_cast<float>(bbox.y.max);
+    primitive.max_z = static_cast<float>(bbox.z.max);
+
+    const Point3& center = surface.get_center();
+
+    primitive.parameters[0] = static_cast<float>(center.x());
+    primitive.parameters[1] = static_cast<float>(center.y());
+    primitive.parameters[2] = static_cast<float>(center.z());
+
+    primitive.parameters[3] =
+        static_cast<float>(surface.get_scale());
+
+    primitive.parameters[4] =
+        static_cast<float>(surface.get_param_a());
+
+    primitive.parameters[5] =
+        static_cast<float>(surface.get_param_b());
+
+    primitive.parameters[6] =
+        static_cast<float>(surface.get_param_c());
+
+    primitive.material_index = material_index;
+
+    return primitive;
+}
+
+inline GPUPrimitive convert_tangle_cube_to_gpu(
+    const TangleCube& surface,
+    int material_index
+) {
+    GPUPrimitive primitive{};
+
+    primitive.type = GPUPrimitiveType::TangleCube;
+
+    const Aabb bbox = surface.bounding_box();
+
+    primitive.min_x = static_cast<float>(bbox.x.min);
+    primitive.min_y = static_cast<float>(bbox.y.min);
+    primitive.min_z = static_cast<float>(bbox.z.min);
+
+    primitive.max_x = static_cast<float>(bbox.x.max);
+    primitive.max_y = static_cast<float>(bbox.y.max);
+    primitive.max_z = static_cast<float>(bbox.z.max);
+
+    const Point3& center = surface.get_center();
+
+    primitive.parameters[0] = static_cast<float>(center.x());
+    primitive.parameters[1] = static_cast<float>(center.y());
+    primitive.parameters[2] = static_cast<float>(center.z());
+
+    primitive.parameters[3] =
+        static_cast<float>(surface.get_scale());
+
+    primitive.material_index = material_index;
+
+    return primitive;
+}
+
 inline GPUPrimitive add_sphere_to_gpu_scene(
     GPUScene& scene,
     const Sphere& sphere
@@ -514,6 +763,90 @@ inline GPUPrimitive add_hyperbolic_paraboloid_to_gpu_scene(
     );
 }
 
+inline GPUPrimitive add_torus_to_gpu_scene(
+    GPUScene& scene,
+    const Torus& torus
+) {
+    const int material_index = add_material_to_gpu_scene(
+        scene,
+        torus.get_material()
+    );
+
+    return convert_torus_to_gpu(torus, material_index);
+}
+
+inline GPUPrimitive add_bohemian_dome_to_gpu_scene(
+    GPUScene& scene,
+    const BohemianDome& dome
+) {
+    const int material_index = add_material_to_gpu_scene(
+        scene,
+        dome.get_material()
+    );
+
+    return convert_bohemian_dome_to_gpu(dome, material_index);
+}
+
+inline GPUPrimitive add_chair_surface_to_gpu_scene(
+    GPUScene& scene,
+    const ChairSurface& surface
+) {
+    const int material_index = add_material_to_gpu_scene(
+        scene,
+        surface.get_material()
+    );
+
+    return convert_chair_surface_to_gpu(surface, material_index);
+}
+
+inline GPUPrimitive add_kummer_surface_to_gpu_scene(
+    GPUScene& scene,
+    const KummerSurface& surface
+) {
+    const int material_index = add_material_to_gpu_scene(
+        scene,
+        surface.get_material()
+    );
+
+    return convert_kummer_surface_to_gpu(surface, material_index);
+}
+
+inline GPUPrimitive add_roman_surface_to_gpu_scene(
+    GPUScene& scene,
+    const RomanSurface& surface
+) {
+    const int material_index = add_material_to_gpu_scene(
+        scene,
+        surface.get_material()
+    );
+
+    return convert_roman_surface_to_gpu(surface, material_index);
+}
+
+inline GPUPrimitive add_goursat_surface_to_gpu_scene(
+    GPUScene& scene,
+    const GoursatSurface& surface
+) {
+    const int material_index = add_material_to_gpu_scene(
+        scene,
+        surface.get_material()
+    );
+
+    return convert_goursat_surface_to_gpu(surface, material_index);
+}
+
+inline GPUPrimitive add_tangle_cube_to_gpu_scene(
+    GPUScene& scene,
+    const TangleCube& surface
+) {
+    const int material_index = add_material_to_gpu_scene(
+        scene,
+        surface.get_material()
+    );
+
+    return convert_tangle_cube_to_gpu(surface, material_index);
+}
+
 inline GPUPrimitive add_quad_to_gpu_scene(
     GPUScene& scene,
     const Quad& quad
@@ -550,6 +883,62 @@ inline GPUScene build_gpu_scene_from_list(
             primitive = add_sphere_to_gpu_scene(
                 scene,
                 *sphere
+            );
+
+        } else if (auto torus =
+            std::dynamic_pointer_cast<Torus>(object)) {
+
+            primitive = add_torus_to_gpu_scene(
+                scene,
+                *torus
+            );
+
+        } else if (auto bohemian_dome =
+            std::dynamic_pointer_cast<BohemianDome>(object)) {
+
+            primitive = add_bohemian_dome_to_gpu_scene(
+                scene,
+                *bohemian_dome
+            );
+
+        } else if (auto chair_surface =
+            std::dynamic_pointer_cast<ChairSurface>(object)) {
+
+            primitive = add_chair_surface_to_gpu_scene(
+                scene,
+                *chair_surface
+            );
+
+        } else if (auto kummer_surface =
+            std::dynamic_pointer_cast<KummerSurface>(object)) {
+
+            primitive = add_kummer_surface_to_gpu_scene(
+                scene,
+                *kummer_surface
+            );
+
+        } else if (auto roman_surface =
+            std::dynamic_pointer_cast<RomanSurface>(object)) {
+
+            primitive = add_roman_surface_to_gpu_scene(
+                scene,
+                *roman_surface
+            );
+
+        } else if (auto goursat_surface =
+            std::dynamic_pointer_cast<GoursatSurface>(object)) {
+
+            primitive = add_goursat_surface_to_gpu_scene(
+                scene,
+                *goursat_surface
+            );
+
+        } else if (auto tangle_cube =
+            std::dynamic_pointer_cast<TangleCube>(object)) {
+
+            primitive = add_tangle_cube_to_gpu_scene(
+                scene,
+                *tangle_cube
             );
 
         } else if (auto cone =
